@@ -31,9 +31,10 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/admin", adminRouter);
 app.use("/api/customer", customerRouter);
 
-const clientDistPath = path.resolve(__dirname, "../../..", "client", "dist");
+const clientDistPath = path.resolve(__dirname, "../..", "client", "dist");
 
 if (env.nodeEnv === "production") {
+  console.log(`Serving client from ${clientDistPath}`);
   app.use(express.static(clientDistPath));
   app.get("*", (_req, res) => {
     res.sendFile(path.join(clientDistPath, "index.html"));
