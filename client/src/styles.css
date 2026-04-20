@@ -1351,7 +1351,7 @@ button:disabled {
   animation: rise-in 260ms ease both;
 }
 
-.install-app-notice div {
+.install-app-notice > div:first-child {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -1369,10 +1369,28 @@ button:disabled {
   line-height: 1.25;
 }
 
+.install-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .install-app-notice .admin-primary {
   flex: 0 0 auto;
   min-height: 42px;
   padding: 0 12px;
+}
+
+.install-close-button {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(34, 32, 29, 0.1);
+  border-radius: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.74);
 }
 
 .notification-modal-overlay {
@@ -2429,6 +2447,11 @@ button:disabled {
     align-items: stretch;
     flex-direction: column;
     bottom: max(84px, calc(env(safe-area-inset-bottom) + 84px));
+  }
+
+  .install-app-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 42px;
   }
 
   .install-app-notice .admin-primary {

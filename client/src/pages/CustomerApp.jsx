@@ -122,19 +122,24 @@ function StatusIcon({ status, loading }) {
   return <Sparkles size={18} />;
 }
 
-function InstallAppNotice({ visible, canInstall, message, onInstall }) {
+function InstallAppNotice({ visible, canInstall, message, onInstall, onClose }) {
   if (!visible) return null;
 
   return (
     <aside className="install-app-notice" aria-label="Install app notice">
       <div>
-        <strong>Install the app</strong>
+        <strong>Install Arena Bar</strong>
         <span>{message || "Get the fastest pickup experience and reliable order alerts."}</span>
       </div>
-      <button className="admin-primary" type="button" onClick={onInstall}>
-        <Plus size={17} />
-        <span>{canInstall ? "Install" : "How to install"}</span>
-      </button>
+      <div className="install-app-actions">
+        <button className="admin-primary" type="button" onClick={onInstall}>
+          <Plus size={17} />
+          <span>{canInstall ? "Install app" : "How to install"}</span>
+        </button>
+        <button className="install-close-button" type="button" onClick={onClose} aria-label="Close install notice">
+          <X size={17} />
+        </button>
+      </div>
     </aside>
   );
 }
@@ -508,7 +513,7 @@ function NameGate({ initialName, onContinue }) {
       <form className="name-gate" onSubmit={handleSubmit}>
         <BrandMark />
         <div className="customer-copy">
-          <p className="eyebrow">Ready Order</p>
+          <p className="eyebrow">Arena Bar</p>
           <h1>Start your pickup</h1>
           <p>Choose a unique name so the bar can call your order.</p>
         </div>
@@ -1005,13 +1010,14 @@ export default function CustomerApp() {
   const [statusPulse, setStatusPulse] = useState(false);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => isRunningInstalled());
+  const [installDismissed, setInstallDismissed] = useState(false);
   const [installMessage, setInstallMessage] = useState("");
   const [notificationPermission, setNotificationPermission] = useState(() =>
     canNotify() ? Notification.permission : "unsupported"
   );
 
   const showNotificationButton = pushAvailable && !pushEnabled && notificationPermission !== "denied";
-  const showInstallNotice = !isInstalled;
+  const showInstallNotice = !isInstalled && !installDismissed;
   const showNotificationModal =
     isInstalled && pushAvailable && canNotify() && (!pushEnabled || notificationPermission !== "granted");
 
@@ -1108,12 +1114,14 @@ export default function CustomerApp() {
     function handleBeforeInstallPrompt(event) {
       event.preventDefault();
       setInstallPromptEvent(event);
+      setInstallDismissed(false);
       setIsInstalled(isRunningInstalled());
     }
 
     function handleInstalled() {
       setIsInstalled(true);
       setInstallPromptEvent(null);
+      setInstallDismissed(false);
       setInstallMessage("");
       enableNotifications().catch(() => {});
     }
@@ -1157,6 +1165,7 @@ export default function CustomerApp() {
           canInstall={Boolean(installPromptEvent)}
           message={installMessage}
           onInstall={installApp}
+          onClose={() => setInstallDismissed(true)}
         />
         <NotificationRequiredModal
           visible={showNotificationModal}

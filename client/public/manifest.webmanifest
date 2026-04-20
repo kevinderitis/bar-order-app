@@ -1,7 +1,7 @@
 {
-  "name": "Ready Order",
-  "short_name": "Ready",
-  "description": "Link and follow your pickup order.",
+  "name": "Arena Bar",
+  "short_name": "Arena Bar",
+  "description": "Order food and drinks from Phangan Arena Bar.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
