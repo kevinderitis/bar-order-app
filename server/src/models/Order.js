@@ -1,13 +1,47 @@
 import mongoose from "mongoose";
 
 export const ORDER_STATUSES = [
-  "pending_link",
-  "linked",
+  "pending",
   "preparing",
   "ready",
-  "delivered",
-  "cancelled"
+  "delivered"
 ];
+
+const orderItemSchema = new mongoose.Schema(
+  {
+    menuItemId: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1
+    },
+    unitPrice: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lineTotal: {
+      type: Number,
+      required: true,
+      min: 0
+    }
+  },
+  { _id: false }
+);
 
 const orderSchema = new mongoose.Schema(
   {
@@ -17,10 +51,21 @@ const orderSchema = new mongoose.Schema(
       trim: true,
       maxlength: 80
     },
+    customerNameKey: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true
+    },
+    activeName: {
+      type: Boolean,
+      default: true,
+      index: true
+    },
     status: {
       type: String,
       enum: ORDER_STATUSES,
-      default: "pending_link",
+      default: "pending",
       required: true
     },
     linkedDeviceId: {
@@ -29,9 +74,24 @@ const orderSchema = new mongoose.Schema(
       default: null,
       index: true
     },
-    linkedAt: {
-      type: Date,
-      default: null
+    items: {
+      type: [orderItemSchema],
+      default: []
+    },
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    discountTotal: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    total: {
+      type: Number,
+      required: true,
+      min: 0
     },
     readyAt: {
       type: Date,
@@ -58,11 +118,11 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index(
-  { status: 1 },
+  { customerNameKey: 1 },
   {
-    name: "unique_pending_link_order",
+    name: "unique_active_customer_name",
     unique: true,
-    partialFilterExpression: { status: "pending_link" }
+    partialFilterExpression: { activeName: true }
   }
 );
 

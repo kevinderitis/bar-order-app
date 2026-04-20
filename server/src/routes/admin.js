@@ -12,10 +12,14 @@ export const adminRouter = express.Router();
 function serializeOrder(order) {
   return {
     id: order._id.toString(),
+    orderNumber: order._id.toString().slice(-6).toUpperCase(),
     customerName: order.customerName,
     status: order.status,
     linkedDeviceId: order.linkedDeviceId,
-    linkedAt: order.linkedAt,
+    items: order.items,
+    subtotal: order.subtotal,
+    discountTotal: order.discountTotal,
+    total: order.total,
     readyAt: order.readyAt,
     deliveredAt: order.deliveredAt,
     notificationPingAt: order.notificationPingAt,
@@ -76,18 +80,8 @@ adminRouter.get("/orders", async (_req, res, next) => {
 
 adminRouter.post("/orders", async (req, res, next) => {
   try {
-    const customerName = String(req.body.customerName || "").trim();
-
-    if (!customerName) {
-      throw httpError(400, "Customer name is required");
-    }
-
-    const order = await Order.create({ customerName, status: "pending_link" });
-    res.status(201).json({ order: serializeOrder(order) });
+    throw httpError(410, "Orders are created from the customer app");
   } catch (error) {
-    if (error?.code === 11000) {
-      return next(httpError(409, "Only one pending order can exist at a time"));
-    }
     return next(error);
   }
 });
@@ -101,20 +95,15 @@ adminRouter.patch("/orders/:id/status", async (req, res, next) => {
     }
 
     const set = { status };
+    if (["pending", "preparing", "ready"].includes(status)) set.activeName = true;
     if (status === "ready") {
       set.readyAt = new Date();
       set.notificationPingAt = new Date();
       set.notificationMessage = "Your order is ready for pickup";
     }
-    if (status === "delivered") set.deliveredAt = new Date();
-
-    if (status === "pending_link") {
-      set.linkedDeviceId = null;
-      set.linkedAt = null;
-      set.readyAt = null;
-      set.deliveredAt = null;
-      set.notificationPingAt = null;
-      set.notificationMessage = null;
+    if (status === "delivered") {
+      set.deliveredAt = new Date();
+      set.activeName = false;
     }
 
     const order = await Order.findByIdAndUpdate(req.params.id, { $set: set }, { new: true });

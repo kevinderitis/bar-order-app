@@ -28,8 +28,9 @@ export const api = {
     request(`/admin/orders/${id}/status`, { method: "PATCH", token, body: { status } }),
   pingOrder: (token, id) => request(`/admin/orders/${id}/ping`, { method: "POST", token }),
   deleteOrder: (token, id) => request(`/admin/orders/${id}`, { method: "DELETE", token }),
-  linkOrder: (qrCode, deviceId) =>
-    request("/customer/link", { method: "POST", body: { qrCode, deviceId } }),
+  getMenu: () => request("/customer/menu"),
+  checkNameAvailability: (name) => request(`/customer/name-availability?name=${encodeURIComponent(name)}`),
+  createCustomerOrder: (body) => request("/customer/orders", { method: "POST", body }),
   getCustomerOrder: (deviceId) => request(`/customer/order?deviceId=${encodeURIComponent(deviceId)}`),
   getPushConfig: () => request("/customer/push-config"),
   savePushSubscription: (deviceId, subscription) =>

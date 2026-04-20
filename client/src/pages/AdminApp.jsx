@@ -1,18 +1,20 @@
-import { Bell, LogOut, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, LogOut, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import BrandMark from "../components/BrandMark.jsx";
 import { api } from "../lib/api.js";
 
-const STATUSES = ["pending_link", "linked", "preparing", "ready", "delivered", "cancelled"];
+const STATUSES = ["pending", "preparing", "ready", "delivered"];
 
 const statusLabels = {
-  pending_link: "Pending link",
-  linked: "Linked",
+  pending: "Pending",
   preparing: "Preparing",
   ready: "Ready",
-  delivered: "Delivered",
-  cancelled: "Cancelled"
+  delivered: "Delivered"
 };
+
+function money(value) {
+  return new Intl.NumberFormat("en", { style: "currency", currency: "USD" }).format(value || 0);
+}
 
 function formatDate(value) {
   if (!value) return "-";
@@ -28,12 +30,9 @@ export default function AdminApp() {
   const [token, setToken] = useState(() => localStorage.getItem("ready-order-admin-token") || "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [customerName, setCustomerName] = useState("");
   const [orders, setOrders] = useState([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const hasPending = useMemo(() => orders.some((order) => order.status === "pending_link"), [orders]);
 
   const loadOrders = useCallback(async () => {
     if (!token) return;
@@ -65,22 +64,6 @@ export default function AdminApp() {
       setToken(data.token);
       setUsername("");
       setPassword("");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCreateOrder(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      await api.createOrder(token, customerName);
-      setCustomerName("");
-      setMessage("Order created");
-      await loadOrders();
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -182,51 +165,45 @@ export default function AdminApp() {
         </div>
       </header>
 
-      <section className="admin-create">
-        <form onSubmit={handleCreateOrder}>
-          <label>
-            <span>Customer name</span>
-            <input
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="e.g. Alex Morgan"
-              maxLength={80}
-            />
-          </label>
-          <button className="admin-primary" type="submit" disabled={busy || !customerName.trim() || hasPending}>
-            <Plus size={18} />
-            <span>Create order</span>
-          </button>
-        </form>
-        <p>{hasPending ? "Link the current pending order before creating another one." : "New orders start pending."}</p>
-      </section>
-
       {message ? <p className="admin-message">{message}</p> : null}
 
-      <section className="orders-panel" aria-label="Orders">
-        <div className="orders-table orders-head">
-          <span>Customer</span>
-          <span>Status</span>
-          <span>Linked</span>
-          <span>Updated</span>
-          <span>Actions</span>
-        </div>
+      <section className="admin-orders-grid" aria-label="Orders">
         {orders.length === 0 ? (
           <div className="empty-orders">No orders yet</div>
         ) : (
           orders.map((order) => (
-            <div className="orders-table order-row" key={order.id}>
-              <strong>{order.customerName}</strong>
-              <select value={order.status} onChange={(event) => handleStatusChange(order.id, event.target.value)}>
-                {STATUSES.map((status) => (
-                  <option value={status} key={status}>
-                    {statusLabels[status]}
-                  </option>
+            <article className="admin-order-card" key={order.id}>
+              <div className="admin-order-head">
+                <div>
+                  <span>#{order.orderNumber}</span>
+                  <h2>{order.customerName}</h2>
+                  <p>{formatDate(order.createdAt)}</p>
+                </div>
+                <strong>{money(order.total)}</strong>
+              </div>
+
+              <div className="admin-order-items">
+                {order.items?.map((item) => (
+                  <div key={item.menuItemId}>
+                    <span>{item.quantity}x {item.name}</span>
+                    <strong>{money(item.lineTotal)}</strong>
+                  </div>
                 ))}
-              </select>
-              <span>{order.linkedAt ? formatDate(order.linkedAt) : "-"}</span>
-              <span>{formatDate(order.updatedAt)}</span>
-              <div className="order-actions">
+              </div>
+
+              <div className="admin-order-total">
+                <span>Discounts</span>
+                <strong>-{money(order.discountTotal)}</strong>
+              </div>
+
+              <div className="admin-order-controls">
+                <select value={order.status} onChange={(event) => handleStatusChange(order.id, event.target.value)}>
+                  {STATUSES.map((status) => (
+                    <option value={status} key={status}>
+                      {statusLabels[status]}
+                    </option>
+                  ))}
+                </select>
                 <button
                   className="admin-icon-button"
                   type="button"
@@ -247,7 +224,7 @@ export default function AdminApp() {
                   <Trash2 size={16} />
                 </button>
               </div>
-            </div>
+            </article>
           ))
         )}
       </section>
