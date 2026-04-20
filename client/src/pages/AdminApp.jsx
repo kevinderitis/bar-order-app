@@ -1,9 +1,9 @@
 import {
   Bell,
+  ChevronDown,
   Edit3,
   LogOut,
   PlusCircle,
-  RefreshCw,
   Save,
   ShieldCheck,
   Trash2,
@@ -15,6 +15,7 @@ import { api } from "../lib/api.js";
 
 const STATUSES = ["pending", "preparing", "ready", "delivered"];
 const TABS = ["orders", "menu", "promotions"];
+const ORDER_PAGE_SIZE = 10;
 
 const statusLabels = {
   pending: "Pending",
@@ -121,168 +122,175 @@ function AdminTabs({ activeTab, onChange }) {
   );
 }
 
-function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
+function AdminModal({ title, eyebrow, children, onClose }) {
   return (
-    <section className="admin-orders-grid" aria-label="Orders">
+    <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label={title}>
+      <section className="admin-modal-panel">
+        <div className="editor-form-head">
+          <div>
+            <p className="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+          </div>
+          <button className="admin-icon-button" type="button" onClick={onClose} aria-label="Close">
+            <X size={17} />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
+  const [page, setPage] = useState(1);
+  const [expandedOrderId, setExpandedOrderId] = useState("");
+  const pageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const visibleOrders = orders.slice((safePage - 1) * ORDER_PAGE_SIZE, safePage * ORDER_PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
+  return (
+    <section className="admin-orders-panel" aria-label="Orders">
       {orders.length === 0 ? (
         <div className="empty-orders">No orders yet</div>
       ) : (
-        orders.map((order) => (
-          <article className="admin-order-card" key={order.id}>
-            <div className="admin-order-head">
-              <div>
-                <span>#{order.orderNumber}</span>
-                <h2>{order.customerName}</h2>
-                <p>{formatDate(order.createdAt)}</p>
-              </div>
-              <strong>{money(order.total)}</strong>
+        <>
+          <div className="admin-orders-table">
+            <div className="admin-orders-head">
+              <span>Order</span>
+              <span>Customer</span>
+              <span>Status</span>
+              <span>Total</span>
+              <span>Actions</span>
             </div>
+            {visibleOrders.map((order) => {
+              const expanded = expandedOrderId === order.id;
 
-            <div className="admin-order-items">
-              {order.items?.map((item) => (
-                <div key={`${item.menuItemId}-${item.option || ""}`}>
-                  <span>{item.quantity}x {item.name}{item.option ? ` · ${item.option}` : ""}</span>
-                  <strong>{money(item.lineTotal)}</strong>
-                </div>
-              ))}
-            </div>
+              return (
+                <article className={expanded ? "admin-order-row admin-order-row-open" : "admin-order-row"} key={order.id}>
+                  <button
+                    className="admin-order-summary"
+                    type="button"
+                    onClick={() => setExpandedOrderId(expanded ? "" : order.id)}
+                    aria-expanded={expanded}
+                  >
+                    <span>
+                      <strong>#{order.orderNumber}</strong>
+                      <small>{formatDate(order.createdAt)}</small>
+                    </span>
+                    <span>
+                      <strong>{order.customerName}</strong>
+                      <small>{order.items?.length || 0} lines</small>
+                    </span>
+                    <span className={`admin-status-badge admin-status-${order.status}`}>{statusLabels[order.status]}</span>
+                    <strong>{money(order.total)}</strong>
+                    <ChevronDown className="admin-row-chevron" size={18} />
+                  </button>
 
-            <div className="admin-order-total">
-              <span>Discounts</span>
-              <strong>-{money(order.discountTotal)}</strong>
-            </div>
+                  {expanded ? (
+                    <div className="admin-order-expanded">
+                      <div className="admin-order-items">
+                        {order.items?.map((item) => (
+                          <div key={`${item.menuItemId}-${item.option || ""}`}>
+                            <span>{item.quantity}x {item.name}{item.option ? ` · ${item.option}` : ""}</span>
+                            <strong>{money(item.lineTotal)}</strong>
+                          </div>
+                        ))}
+                      </div>
 
-            {order.notes ? (
-              <div className="admin-order-note">
-                <span>Note</span>
-                <p>{order.notes}</p>
-              </div>
-            ) : null}
+                      <div className="admin-order-total">
+                        <span>Discounts</span>
+                        <strong>-{money(order.discountTotal)}</strong>
+                      </div>
 
-            <div className="admin-order-controls">
-              <select value={order.status} onChange={(event) => onStatusChange(order.id, event.target.value)}>
-                {STATUSES.map((status) => (
-                  <option value={status} key={status}>
-                    {statusLabels[status]}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="admin-icon-button"
-                type="button"
-                onClick={() => onPing(order.id)}
-                disabled={!order.linkedDeviceId}
-                aria-label={`Send notification ping to ${order.customerName}`}
-                title="Send ping"
-              >
-                <Bell size={16} />
+                      {order.notes ? (
+                        <div className="admin-order-note">
+                          <span>Note</span>
+                          <p>{order.notes}</p>
+                        </div>
+                      ) : null}
+
+                      <div className="admin-order-controls">
+                        <select value={order.status} onChange={(event) => onStatusChange(order.id, event.target.value)}>
+                          {STATUSES.map((status) => (
+                            <option value={status} key={status}>
+                              {statusLabels[status]}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="admin-icon-button"
+                          type="button"
+                          onClick={() => onPing(order.id)}
+                          disabled={!order.linkedDeviceId}
+                          aria-label={`Send notification ping to ${order.customerName}`}
+                          title="Send ping"
+                        >
+                          <Bell size={16} />
+                        </button>
+                        <button
+                          className="admin-icon-button admin-danger-button"
+                          type="button"
+                          onClick={() => onDelete(order.id, order.customerName)}
+                          aria-label={`Delete order for ${order.customerName}`}
+                          title="Delete order"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+          <div className="admin-pagination">
+            <span>Page {safePage} of {pageCount}</span>
+            <div>
+              <button className="admin-secondary" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={safePage === 1}>
+                Previous
               </button>
-              <button
-                className="admin-icon-button admin-danger-button"
-                type="button"
-                onClick={() => onDelete(order.id, order.customerName)}
-                aria-label={`Delete order for ${order.customerName}`}
-                title="Delete order"
-              >
-                <Trash2 size={16} />
+              <button className="admin-secondary" type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={safePage === pageCount}>
+                Next
               </button>
             </div>
-          </article>
-        ))
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-function MenuSection({ items, form, editingId, setForm, onSubmit, onEdit, onCancel, onDelete, onToggle }) {
+function MenuSection({
+  items,
+  form,
+  editingId,
+  modalOpen,
+  setForm,
+  onSubmit,
+  onEdit,
+  onCreate,
+  onCancel,
+  onDelete,
+  onToggle
+}) {
   const categories = useMemo(() => [...new Set(items.map((item) => item.category))], [items]);
 
   return (
-    <section className="admin-editor-grid" aria-label="Menu editor">
-      <form className="admin-editor-form" onSubmit={onSubmit}>
-        <div className="editor-form-head">
-          <div>
-            <p className="eyebrow">Menu</p>
-            <h2>{editingId ? "Edit item" : "Create item"}</h2>
-          </div>
-          {editingId ? (
-            <button className="admin-secondary" type="button" onClick={onCancel}>
-              <X size={16} />
-              <span>Cancel</span>
-            </button>
-          ) : null}
+    <section className="admin-list-section" aria-label="Menu editor">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Menu</p>
+          <h2>Menu items</h2>
         </div>
-
-        <label>
-          <span>Name</span>
-          <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-        </label>
-        <label>
-          <span>Category</span>
-          <input
-            value={form.category}
-            onChange={(event) => setForm({ ...form, category: event.target.value })}
-            list="menu-categories"
-          />
-          <datalist id="menu-categories">
-            {categories.map((category) => (
-              <option value={category} key={category} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          <span>Description</span>
-          <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-        </label>
-        <div className="admin-form-row">
-          <label>
-            <span>Price</span>
-            <input
-              value={form.price}
-              onChange={(event) => setForm({ ...form, price: event.target.value })}
-              inputMode="decimal"
-            />
-          </label>
-          <label>
-            <span>Discount %</span>
-            <input
-              value={form.discountPercent}
-              onChange={(event) => setForm({ ...form, discountPercent: event.target.value })}
-              inputMode="numeric"
-            />
-          </label>
-        </div>
-        <label>
-          <span>Options, comma separated</span>
-          <input value={form.options} onChange={(event) => setForm({ ...form, options: event.target.value })} />
-        </label>
-        <label>
-          <span>Ingredients, comma separated</span>
-          <input value={form.ingredients} onChange={(event) => setForm({ ...form, ingredients: event.target.value })} />
-        </label>
-        <div className="admin-checks">
-          <label>
-            <input
-              checked={form.active}
-              type="checkbox"
-              onChange={(event) => setForm({ ...form, active: event.target.checked })}
-            />
-            <span>Active</span>
-          </label>
-          <label>
-            <input
-              checked={form.featured}
-              type="checkbox"
-              onChange={(event) => setForm({ ...form, featured: event.target.checked })}
-            />
-            <span>Featured</span>
-          </label>
-        </div>
-        <button className="admin-primary" type="submit">
-          {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
-          <span>{editingId ? "Save item" : "Create item"}</span>
+        <button className="admin-primary" type="button" onClick={onCreate}>
+          <PlusCircle size={17} />
+          <span>Create item</span>
         </button>
-      </form>
+      </div>
 
       <div className="admin-menu-list">
         {items.map((item) => (
@@ -313,11 +321,100 @@ function MenuSection({ items, form, editingId, setForm, onSubmit, onEdit, onCanc
           </article>
         ))}
       </div>
+
+      {modalOpen ? (
+        <AdminModal title={editingId ? "Edit item" : "Create item"} eyebrow="Menu" onClose={onCancel}>
+          <form className="admin-editor-form" onSubmit={onSubmit}>
+            <label>
+              <span>Name</span>
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </label>
+            <label>
+              <span>Category</span>
+              <input
+                value={form.category}
+                onChange={(event) => setForm({ ...form, category: event.target.value })}
+                list="menu-categories"
+              />
+              <datalist id="menu-categories">
+                {categories.map((category) => (
+                  <option value={category} key={category} />
+                ))}
+              </datalist>
+            </label>
+            <label>
+              <span>Description</span>
+              <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+            </label>
+            <div className="admin-form-row">
+              <label>
+                <span>Price</span>
+                <input
+                  value={form.price}
+                  onChange={(event) => setForm({ ...form, price: event.target.value })}
+                  inputMode="decimal"
+                />
+              </label>
+              <label>
+                <span>Discount %</span>
+                <input
+                  value={form.discountPercent}
+                  onChange={(event) => setForm({ ...form, discountPercent: event.target.value })}
+                  inputMode="numeric"
+                />
+              </label>
+            </div>
+            <label>
+              <span>Options, comma separated</span>
+              <input value={form.options} onChange={(event) => setForm({ ...form, options: event.target.value })} />
+            </label>
+            <label>
+              <span>Ingredients, comma separated</span>
+              <input value={form.ingredients} onChange={(event) => setForm({ ...form, ingredients: event.target.value })} />
+            </label>
+            <div className="admin-checks">
+              <label>
+                <input
+                  checked={form.active}
+                  type="checkbox"
+                  onChange={(event) => setForm({ ...form, active: event.target.checked })}
+                />
+                <span>Active</span>
+              </label>
+              <label>
+                <input
+                  checked={form.featured}
+                  type="checkbox"
+                  onChange={(event) => setForm({ ...form, featured: event.target.checked })}
+                />
+                <span>Featured</span>
+              </label>
+            </div>
+            <button className="admin-primary" type="submit">
+              {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
+              <span>{editingId ? "Save item" : "Create item"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
     </section>
   );
 }
 
-function PromotionsSection({ promotions, menuItems, form, editingId, setForm, onSubmit, onEdit, onCancel, onDelete, onToggle }) {
+function PromotionsSection({
+  promotions,
+  menuItems,
+  form,
+  editingId,
+  modalOpen,
+  setForm,
+  onSubmit,
+  onEdit,
+  onCreate,
+  onCancel,
+  onDelete,
+  onToggle
+}) {
   async function handleImageChange(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -333,98 +430,17 @@ function PromotionsSection({ promotions, menuItems, form, editingId, setForm, on
   }
 
   return (
-    <section className="admin-editor-grid" aria-label="Promotions editor">
-      <form className="admin-editor-form" onSubmit={onSubmit}>
-        <div className="editor-form-head">
-          <div>
-            <p className="eyebrow">Promotions</p>
-            <h2>{editingId ? "Edit promo" : "Create promo"}</h2>
-          </div>
-          {editingId ? (
-            <button className="admin-secondary" type="button" onClick={onCancel}>
-              <X size={16} />
-              <span>Cancel</span>
-            </button>
-          ) : null}
+    <section className="admin-list-section" aria-label="Promotions editor">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Promotions</p>
+          <h2>Promotion banners</h2>
         </div>
-        <label>
-          <span>Title</span>
-          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-        </label>
-        <label>
-          <span>Description</span>
-          <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-        </label>
-        <div className="admin-form-row">
-          <label>
-            <span>Display time</span>
-            <input value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} />
-          </label>
-          <label>
-            <span>Accent</span>
-            <select value={form.accent} onChange={(event) => setForm({ ...form, accent: event.target.value })}>
-              <option value="orange">Orange</option>
-              <option value="green">Green</option>
-              <option value="red">Red</option>
-            </select>
-          </label>
-        </div>
-        <div className="admin-form-row">
-          <label>
-            <span>Available from</span>
-            <input
-              value={form.availableFrom}
-              onChange={(event) => setForm({ ...form, availableFrom: event.target.value })}
-              type="time"
-            />
-          </label>
-          <label>
-            <span>Available until</span>
-            <input
-              value={form.availableUntil}
-              onChange={(event) => setForm({ ...form, availableUntil: event.target.value })}
-              type="time"
-            />
-          </label>
-        </div>
-        <label>
-          <span>Button item</span>
-          <select value={form.itemId} onChange={(event) => setForm({ ...form, itemId: event.target.value })}>
-            <option value="">No item</option>
-            {menuItems.map((item) => (
-              <option value={item.slug} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Banner image</span>
-          <input accept="image/*" type="file" onChange={handleImageChange} />
-        </label>
-        {form.imageDataUrl ? (
-          <div className="admin-image-preview">
-            <img src={form.imageDataUrl} alt="Promotion preview" />
-            <button className="admin-secondary" type="button" onClick={() => setForm({ ...form, imageDataUrl: "" })}>
-              Remove image
-            </button>
-          </div>
-        ) : null}
-        <div className="admin-checks">
-          <label>
-            <input
-              checked={form.active}
-              type="checkbox"
-              onChange={(event) => setForm({ ...form, active: event.target.checked })}
-            />
-            <span>Active</span>
-          </label>
-        </div>
-        <button className="admin-primary" type="submit">
-          {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
-          <span>{editingId ? "Save promo" : "Create promo"}</span>
+        <button className="admin-primary" type="button" onClick={onCreate}>
+          <PlusCircle size={17} />
+          <span>Create promo</span>
         </button>
-      </form>
+      </div>
 
       <div className="admin-menu-list">
         {promotions.map((promotion) => (
@@ -465,10 +481,93 @@ function PromotionsSection({ promotions, menuItems, form, editingId, setForm, on
           </article>
         ))}
       </div>
+
+      {modalOpen ? (
+        <AdminModal title={editingId ? "Edit promo" : "Create promo"} eyebrow="Promotions" onClose={onCancel}>
+          <form className="admin-editor-form" onSubmit={onSubmit}>
+            <label>
+              <span>Title</span>
+              <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+            </label>
+            <label>
+              <span>Description</span>
+              <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+            </label>
+            <div className="admin-form-row">
+              <label>
+                <span>Display time</span>
+                <input value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} />
+              </label>
+              <label>
+                <span>Accent</span>
+                <select value={form.accent} onChange={(event) => setForm({ ...form, accent: event.target.value })}>
+                  <option value="orange">Orange</option>
+                  <option value="green">Green</option>
+                  <option value="red">Red</option>
+                </select>
+              </label>
+            </div>
+            <div className="admin-form-row">
+              <label>
+                <span>Available from</span>
+                <input
+                  value={form.availableFrom}
+                  onChange={(event) => setForm({ ...form, availableFrom: event.target.value })}
+                  type="time"
+                />
+              </label>
+              <label>
+                <span>Available until</span>
+                <input
+                  value={form.availableUntil}
+                  onChange={(event) => setForm({ ...form, availableUntil: event.target.value })}
+                  type="time"
+                />
+              </label>
+            </div>
+            <label>
+              <span>Button item</span>
+              <select value={form.itemId} onChange={(event) => setForm({ ...form, itemId: event.target.value })}>
+                <option value="">No item</option>
+                {menuItems.map((item) => (
+                  <option value={item.slug} key={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Banner image</span>
+              <input accept="image/*" type="file" onChange={handleImageChange} />
+            </label>
+            {form.imageDataUrl ? (
+              <div className="admin-image-preview">
+                <img src={form.imageDataUrl} alt="Promotion preview" />
+                <button className="admin-secondary" type="button" onClick={() => setForm({ ...form, imageDataUrl: "" })}>
+                  Remove image
+                </button>
+              </div>
+            ) : null}
+            <div className="admin-checks">
+              <label>
+                <input
+                  checked={form.active}
+                  type="checkbox"
+                  onChange={(event) => setForm({ ...form, active: event.target.checked })}
+                />
+                <span>Active</span>
+              </label>
+            </div>
+            <button className="admin-primary" type="submit">
+              {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
+              <span>{editingId ? "Save promo" : "Create promo"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
     </section>
   );
 }
-
 export default function AdminApp() {
   const [token, setToken] = useState(() => localStorage.getItem("ready-order-admin-token") || "");
   const [username, setUsername] = useState("");
@@ -481,8 +580,10 @@ export default function AdminApp() {
   const [busy, setBusy] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [editingItemId, setEditingItemId] = useState("");
+  const [itemModalOpen, setItemModalOpen] = useState(false);
   const [promotionForm, setPromotionForm] = useState(emptyPromotionForm);
   const [editingPromotionId, setEditingPromotionId] = useState("");
+  const [promotionModalOpen, setPromotionModalOpen] = useState(false);
 
   const loadOrders = useCallback(async () => {
     if (!token) return;
@@ -580,6 +681,7 @@ export default function AdminApp() {
 
   function editItem(item) {
     setEditingItemId(item.id);
+    setItemModalOpen(true);
     setItemForm({
       name: item.name,
       category: item.category,
@@ -594,6 +696,12 @@ export default function AdminApp() {
     });
   }
 
+  function createItem() {
+    setEditingItemId("");
+    setItemForm(emptyItemForm);
+    setItemModalOpen(true);
+  }
+
   async function submitItem(event) {
     event.preventDefault();
     setMessage("");
@@ -604,6 +712,7 @@ export default function AdminApp() {
       setMessage(data.message);
       setItemForm(emptyItemForm);
       setEditingItemId("");
+      setItemModalOpen(false);
       await loadMenu();
     } catch (error) {
       setMessage(error.message);
@@ -633,6 +742,7 @@ export default function AdminApp() {
 
   function editPromotion(promotion) {
     setEditingPromotionId(promotion.id);
+    setPromotionModalOpen(true);
     setPromotionForm({
       title: promotion.title,
       description: promotion.description,
@@ -647,6 +757,12 @@ export default function AdminApp() {
     });
   }
 
+  function createPromotion() {
+    setEditingPromotionId("");
+    setPromotionForm(emptyPromotionForm);
+    setPromotionModalOpen(true);
+  }
+
   async function submitPromotion(event) {
     event.preventDefault();
     setMessage("");
@@ -657,6 +773,7 @@ export default function AdminApp() {
       setMessage(data.message);
       setPromotionForm(emptyPromotionForm);
       setEditingPromotionId("");
+      setPromotionModalOpen(false);
       await loadPromotions();
     } catch (error) {
       setMessage(error.message);
@@ -727,10 +844,6 @@ export default function AdminApp() {
           </div>
         </div>
         <div className="admin-actions">
-          <button className="admin-secondary" type="button" onClick={loadAll}>
-            <RefreshCw size={16} />
-            <span>Refresh</span>
-          </button>
           <button className="admin-secondary" type="button" onClick={logout}>
             <LogOut size={16} />
             <span>Log out</span>
@@ -755,12 +868,15 @@ export default function AdminApp() {
           items={menuItems}
           form={itemForm}
           editingId={editingItemId}
+          modalOpen={itemModalOpen}
           setForm={setItemForm}
           onSubmit={submitItem}
           onEdit={editItem}
+          onCreate={createItem}
           onCancel={() => {
             setEditingItemId("");
             setItemForm(emptyItemForm);
+            setItemModalOpen(false);
           }}
           onDelete={deleteItem}
           onToggle={toggleItem}
@@ -773,12 +889,15 @@ export default function AdminApp() {
           menuItems={menuItems}
           form={promotionForm}
           editingId={editingPromotionId}
+          modalOpen={promotionModalOpen}
           setForm={setPromotionForm}
           onSubmit={submitPromotion}
           onEdit={editPromotion}
+          onCreate={createPromotion}
           onCancel={() => {
             setEditingPromotionId("");
             setPromotionForm(emptyPromotionForm);
+            setPromotionModalOpen(false);
           }}
           onDelete={deletePromotion}
           onToggle={togglePromotion}

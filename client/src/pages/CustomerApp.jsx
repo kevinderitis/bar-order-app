@@ -30,6 +30,10 @@ import { getDeviceId } from "../lib/device.js";
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
 
+function isRunningInstalled() {
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+}
+
 const statusLabels = {
   pending: "Pending",
   preparing: "Preparing",
@@ -116,6 +120,53 @@ function StatusIcon({ status, loading }) {
   if (status === "ready" || status === "delivered") return <CheckCircle2 size={18} />;
   if (status === "pending" || status === "preparing") return <Clock3 size={18} />;
   return <Sparkles size={18} />;
+}
+
+function InstallAppNotice({ visible, canInstall, message, onInstall }) {
+  if (!visible) return null;
+
+  return (
+    <aside className="install-app-notice" aria-label="Install app notice">
+      <div>
+        <strong>Install the app</strong>
+        <span>{message || "Get the fastest pickup experience and reliable order alerts."}</span>
+      </div>
+      <button className="admin-primary" type="button" onClick={onInstall}>
+        <Plus size={17} />
+        <span>{canInstall ? "Install" : "How to install"}</span>
+      </button>
+    </aside>
+  );
+}
+
+function NotificationRequiredModal({ visible, permission, busy, onEnable }) {
+  if (!visible) return null;
+
+  const denied = permission === "denied";
+
+  return (
+    <div className="notification-modal-overlay" role="dialog" aria-modal="true" aria-label="Enable notifications">
+      <section className="notification-modal notification-required-modal">
+        <div className="modal-bell">
+          <BellRing size={34} />
+        </div>
+        <div className="modal-copy">
+          <h2>{denied ? "Notifications are blocked" : "Turn on order alerts"}</h2>
+          <p>
+            {denied
+              ? "Notifications are blocked in this browser. Enable them in site settings so we can alert you when your order is ready."
+              : "Notifications are required for pickup alerts. Please enable them so we can tell you when your order is ready."}
+          </p>
+        </div>
+        <div className="modal-actions">
+          <button className="modal-primary" type="button" onClick={onEnable} disabled={busy || denied}>
+            {busy ? <Loader2 className="spin" size={18} /> : <BellRing size={18} />}
+            <span>{denied ? "Blocked in settings" : "Enable notifications"}</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function MenuItemIcon({ item }) {
@@ -950,42 +1001,57 @@ export default function CustomerApp() {
   const [loading, setLoading] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushAvailable, setPushAvailable] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
   const [statusPulse, setStatusPulse] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(() => isRunningInstalled());
+  const [installMessage, setInstallMessage] = useState("");
   const [notificationPermission, setNotificationPermission] = useState(() =>
     canNotify() ? Notification.permission : "unsupported"
   );
 
   const showNotificationButton = pushAvailable && !pushEnabled && notificationPermission !== "denied";
+  const showInstallNotice = !isInstalled;
+  const showNotificationModal =
+    isInstalled && pushAvailable && canNotify() && (!pushEnabled || notificationPermission !== "granted");
 
   const enableNotifications = useCallback(async () => {
     if (!canNotify()) return;
+    setNotificationBusy(true);
     const pushConfig = await api.getPushConfig();
-    if (!pushConfig.enabled || !pushConfig.publicKey) return;
-
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission !== "granted") return;
-
-    const registration = await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    const currentKey = subscription?.options?.applicationServerKey
-      ? arrayBufferToBase64Url(subscription.options.applicationServerKey)
-      : "";
-
-    if (subscription && currentKey && currentKey !== pushConfig.publicKey) {
-      await subscription.unsubscribe();
-      subscription = null;
+    if (!pushConfig.enabled || !pushConfig.publicKey) {
+      setNotificationBusy(false);
+      return;
     }
 
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(pushConfig.publicKey)
-      });
-    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission !== "granted") return;
 
-    await api.savePushSubscription(deviceId, subscription.toJSON());
-    setPushEnabled(true);
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      const currentKey = subscription?.options?.applicationServerKey
+        ? arrayBufferToBase64Url(subscription.options.applicationServerKey)
+        : "";
+
+      if (subscription && currentKey && currentKey !== pushConfig.publicKey) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(pushConfig.publicKey)
+        });
+      }
+
+      await api.savePushSubscription(deviceId, subscription.toJSON());
+      setPushEnabled(true);
+    } finally {
+      setNotificationBusy(false);
+    }
   }, [deviceId]);
 
   const refreshOrder = useCallback(async () => {
@@ -1027,11 +1093,80 @@ export default function CustomerApp() {
       if (Notification.permission === "granted" && subscription) {
         await api.savePushSubscription(deviceId, subscription.toJSON());
       }
+      if (Notification.permission === "granted" && !subscription && pushConfig.enabled && pushConfig.publicKey) {
+        await enableNotifications().catch(() => {});
+        setNotificationPermission(Notification.permission);
+        return;
+      }
       setPushEnabled(Boolean(subscription && Notification.permission === "granted"));
       setNotificationPermission(Notification.permission);
     }
     checkPushState().catch(() => {});
-  }, [deviceId]);
+  }, [deviceId, enableNotifications]);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event) {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+      setIsInstalled(isRunningInstalled());
+    }
+
+    function handleInstalled() {
+      setIsInstalled(true);
+      setInstallPromptEvent(null);
+      setInstallMessage("");
+      enableNotifications().catch(() => {});
+    }
+
+    const displayModeQuery = window.matchMedia?.("(display-mode: standalone)");
+    const handleDisplayModeChange = () => setIsInstalled(isRunningInstalled());
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+    displayModeQuery?.addEventListener?.("change", handleDisplayModeChange);
+    setIsInstalled(isRunningInstalled());
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+      displayModeQuery?.removeEventListener?.("change", handleDisplayModeChange);
+    };
+  }, [enableNotifications]);
+
+  async function installApp() {
+    if (!installPromptEvent) {
+      setInstallMessage("Use your browser menu and choose Add to Home Screen or Install App.");
+      return;
+    }
+
+    installPromptEvent.prompt();
+    const choice = await installPromptEvent.userChoice.catch(() => null);
+    if (choice?.outcome === "accepted") {
+      setInstallMessage("Installing app...");
+    } else {
+      setInstallMessage("Install the app to receive the best pickup alerts.");
+    }
+    setInstallPromptEvent(null);
+  }
+
+  function renderCustomerOverlays() {
+    return (
+      <>
+        <InstallAppNotice
+          visible={showInstallNotice}
+          canInstall={Boolean(installPromptEvent)}
+          message={installMessage}
+          onInstall={installApp}
+        />
+        <NotificationRequiredModal
+          visible={showNotificationModal}
+          permission={notificationPermission}
+          busy={notificationBusy}
+          onEnable={enableNotifications}
+        />
+      </>
+    );
+  }
 
   function addItem(itemId, option = "", options = []) {
     const item = menu.items.find((menuItem) => menuItem.id === itemId);
@@ -1163,50 +1298,64 @@ export default function CustomerApp() {
   }
 
   if (view === "name") {
-    return <NameGate initialName={customerName} onContinue={(name) => { setCustomerName(name); setView("menu"); }} />;
+    return (
+      <>
+        <NameGate initialName={customerName} onContinue={(name) => { setCustomerName(name); setView("menu"); }} />
+        {renderCustomerOverlays()}
+      </>
+    );
   }
 
   if (view === "confirm") {
     return (
-      <ConfirmView
-        cart={cart}
-        notes={notes}
-        onNotesChange={setNotes}
-        onBack={() => setView("menu")}
-        onAddItem={addCartItem}
-        onRemoveItem={removeCartItem}
-        onDeleteItem={deleteCartItem}
-        onFinish={finishOrder}
-        busy={loading}
-      />
+      <>
+        <ConfirmView
+          cart={cart}
+          notes={notes}
+          onNotesChange={setNotes}
+          onBack={() => setView("menu")}
+          onAddItem={addCartItem}
+          onRemoveItem={removeCartItem}
+          onDeleteItem={deleteCartItem}
+          onFinish={finishOrder}
+          busy={loading}
+        />
+        {renderCustomerOverlays()}
+      </>
     );
   }
 
   if (view === "order" && order) {
     return (
-      <OrderView
-        order={order}
-        pushEnabled={pushEnabled}
-        onMenu={() => setView("menu")}
-        onEnableNotifications={enableNotifications}
-        showNotificationButton={showNotificationButton}
-        statusPulse={statusPulse}
-        loading={loading}
-      />
+      <>
+        <OrderView
+          order={order}
+          pushEnabled={pushEnabled}
+          onMenu={() => setView("menu")}
+          onEnableNotifications={enableNotifications}
+          showNotificationButton={showNotificationButton}
+          statusPulse={statusPulse}
+          loading={loading}
+        />
+        {renderCustomerOverlays()}
+      </>
     );
   }
 
   return (
-    <MenuView
-      customerName={customerName}
-      menu={menu}
-      cart={cart}
-      onAdd={addItem}
-      onAddPromo={addPromotionItem}
-      onRemove={removeItem}
-      onCheckout={() => setView("confirm")}
-      onOpenOrder={() => order && setView("order")}
-      order={order}
-    />
+    <>
+      <MenuView
+        customerName={customerName}
+        menu={menu}
+        cart={cart}
+        onAdd={addItem}
+        onAddPromo={addPromotionItem}
+        onRemove={removeItem}
+        onCheckout={() => setView("confirm")}
+        onOpenOrder={() => order && setView("order")}
+        order={order}
+      />
+      {renderCustomerOverlays()}
+    </>
   );
 }
