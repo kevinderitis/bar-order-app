@@ -19,6 +19,28 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    option: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    options: {
+      type: [
+        {
+          name: {
+            type: String,
+            required: true,
+            trim: true
+          },
+          value: {
+            type: String,
+            required: true,
+            trim: true
+          }
+        }
+      ],
+      default: []
+    },
     quantity: {
       type: Number,
       required: true,
@@ -92,6 +114,12 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280
     },
     readyAt: {
       type: Date,

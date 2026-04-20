@@ -3,7 +3,9 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { MenuItem } from "../models/MenuItem.js";
 import { Order, ORDER_STATUSES } from "../models/Order.js";
+import { PROMOTION_ACCENTS, Promotion } from "../models/Promotion.js";
 import { httpError } from "../utils/httpError.js";
 import { sendPushToDevice } from "../utils/push.js";
 
@@ -20,12 +22,130 @@ function serializeOrder(order) {
     subtotal: order.subtotal,
     discountTotal: order.discountTotal,
     total: order.total,
+    notes: order.notes,
     readyAt: order.readyAt,
     deliveredAt: order.deliveredAt,
     notificationPingAt: order.notificationPingAt,
     notificationMessage: order.notificationMessage,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
+  };
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function cleanList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function serializeMenuItem(item) {
+  return {
+    id: item._id.toString(),
+    slug: item.slug,
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    price: item.price,
+    options: item.options || [],
+    optionGroups: item.optionGroups || [],
+    ingredients: item.ingredients || [],
+    discountPercent: item.discountPercent || 0,
+    active: item.active,
+    featured: item.featured,
+    sortOrder: item.sortOrder,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt
+  };
+}
+
+function serializePromotion(promotion) {
+  return {
+    id: promotion._id.toString(),
+    title: promotion.title,
+    description: promotion.description,
+    time: promotion.time,
+    availableFrom: promotion.availableFrom,
+    availableUntil: promotion.availableUntil,
+    itemId: promotion.itemId,
+    kind: promotion.kind,
+    imageDataUrl: promotion.imageDataUrl,
+    accent: promotion.accent,
+    active: promotion.active,
+    sortOrder: promotion.sortOrder,
+    createdAt: promotion.createdAt,
+    updatedAt: promotion.updatedAt
+  };
+}
+
+function menuItemPayload(body) {
+  const name = String(body.name || "").trim();
+  const category = String(body.category || "").trim();
+  const price = Number(body.price);
+
+  if (!name) throw httpError(400, "Item name is required");
+  if (!category) throw httpError(400, "Category is required");
+  if (!Number.isFinite(price) || price < 0) throw httpError(400, "Valid price is required");
+
+  return {
+    name,
+    category,
+    slug: String(body.slug || slugify(`${category}-${name}`)).trim().toLowerCase(),
+    description: String(body.description || "").trim(),
+    price,
+    options: cleanList(body.options),
+    optionGroups: Array.isArray(body.optionGroups) ? body.optionGroups : [],
+    ingredients: cleanList(body.ingredients),
+    discountPercent: Number(body.discountPercent || 0),
+    active: body.active ?? true,
+    featured: body.featured ?? false,
+    sortOrder: Number(body.sortOrder || 0)
+  };
+}
+
+function promotionPayload(body) {
+  const title = String(body.title || "").trim();
+  const description = String(body.description || "").trim();
+  const availableFrom = String(body.availableFrom || "").trim();
+  const availableUntil = String(body.availableUntil || "").trim();
+  const kind = String(body.kind || "").trim();
+
+  if (!title) throw httpError(400, "Promotion title is required");
+  if (!description) throw httpError(400, "Promotion description is required");
+  if (availableFrom && !/^([01]\d|2[0-3]):[0-5]\d$/.test(availableFrom)) {
+    throw httpError(400, "Promotion start time must use HH:MM");
+  }
+  if (availableUntil && !/^([01]\d|2[0-3]):[0-5]\d$/.test(availableUntil)) {
+    throw httpError(400, "Promotion end time must use HH:MM");
+  }
+  if (kind && !["free_thai_food", "bucket_bogo", "pizza_soft_drink"].includes(kind)) {
+    throw httpError(400, "Invalid promotion type");
+  }
+
+  return {
+    title,
+    description,
+    time: String(body.time || "").trim(),
+    availableFrom,
+    availableUntil,
+    itemId: String(body.itemId || "").trim(),
+    kind,
+    imageDataUrl: String(body.imageDataUrl || "").trim(),
+    accent: PROMOTION_ACCENTS.includes(body.accent) ? body.accent : "orange",
+    active: body.active ?? true,
+    sortOrder: Number(body.sortOrder || 0)
   };
 }
 
@@ -73,6 +193,112 @@ adminRouter.get("/orders", async (_req, res, next) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 }).limit(100);
     res.json({ orders: orders.map(serializeOrder) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/menu-items", async (_req, res, next) => {
+  try {
+    const items = await MenuItem.find().sort({ category: 1, sortOrder: 1, name: 1 });
+    res.json({ items: items.map(serializeMenuItem) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/menu-items", async (req, res, next) => {
+  try {
+    const item = await MenuItem.create(menuItemPayload(req.body));
+    res.status(201).json({ item: serializeMenuItem(item), message: "Menu item created" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Menu item slug already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.patch("/menu-items/:id", async (req, res, next) => {
+  try {
+    const item = await MenuItem.findByIdAndUpdate(
+      req.params.id,
+      { $set: menuItemPayload(req.body) },
+      { new: true, runValidators: true }
+    );
+
+    if (!item) {
+      throw httpError(404, "Menu item not found");
+    }
+
+    res.json({ item: serializeMenuItem(item), message: "Menu item updated" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Menu item slug already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.delete("/menu-items/:id", async (req, res, next) => {
+  try {
+    const item = await MenuItem.findByIdAndDelete(req.params.id);
+
+    if (!item) {
+      throw httpError(404, "Menu item not found");
+    }
+
+    res.json({ message: "Menu item deleted" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/promotions", async (_req, res, next) => {
+  try {
+    const promotions = await Promotion.find().sort({ sortOrder: 1, createdAt: 1 });
+    res.json({ promotions: promotions.map(serializePromotion) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/promotions", async (req, res, next) => {
+  try {
+    const promotion = await Promotion.create(promotionPayload(req.body));
+    res.status(201).json({ promotion: serializePromotion(promotion), message: "Promotion created" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch("/promotions/:id", async (req, res, next) => {
+  try {
+    const promotion = await Promotion.findByIdAndUpdate(
+      req.params.id,
+      { $set: promotionPayload(req.body) },
+      { new: true, runValidators: true }
+    );
+
+    if (!promotion) {
+      throw httpError(404, "Promotion not found");
+    }
+
+    res.json({ promotion: serializePromotion(promotion), message: "Promotion updated" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.delete("/promotions/:id", async (req, res, next) => {
+  try {
+    const promotion = await Promotion.findByIdAndDelete(req.params.id);
+
+    if (!promotion) {
+      throw httpError(404, "Promotion not found");
+    }
+
+    res.json({ message: "Promotion deleted" });
   } catch (error) {
     next(error);
   }

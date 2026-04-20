@@ -1,15 +1,26 @@
 import {
   Bell,
   BellRing,
+  Beer,
   CheckCircle2,
   ChevronLeft,
   Clock3,
+  CookingPot,
+  CupSoda,
+  Drumstick,
+  GlassWater,
   Loader2,
+  Martini,
   Minus,
   Plus,
+  Pizza,
+  Search,
   ShoppingBag,
+  Soup,
   Sparkles,
-  Utensils
+  Trash2,
+  Utensils,
+  X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BrandMark from "../components/BrandMark.jsx";
@@ -41,7 +52,41 @@ const statusMessages = {
 };
 
 function money(value) {
-  return new Intl.NumberFormat("en", { style: "currency", currency: "USD" }).format(value || 0);
+  return new Intl.NumberFormat("en-TH", {
+    style: "currency",
+    currency: "THB",
+    maximumFractionDigits: 0
+  }).format(value || 0);
+}
+
+function promotionScheduleLabel(promo) {
+  if (promo.availableFrom && promo.availableUntil) {
+    return `${promo.availableFrom} - ${promo.availableUntil} Thailand`;
+  }
+
+  return promo.time || "Promo";
+}
+
+function inferPromotionKind(promo) {
+  const title = String(promo.title || "").toLowerCase();
+  if (title.includes("thai")) return "free_thai_food";
+  if (title.includes("happy") || title.includes("bucket")) return "bucket_bogo";
+  if (title.includes("pizza")) return "pizza_soft_drink";
+  return promo.kind || "";
+}
+
+function cartLineGross(item) {
+  return item.subtotal ?? item.price * item.quantity;
+}
+
+function cartLineDiscount(item) {
+  if (typeof item.discountAmount === "number") return item.discountAmount;
+  return item.price * item.quantity * ((item.discountPercent || 0) / 100);
+}
+
+function cartLineTotal(item) {
+  if (typeof item.lineTotal === "number") return item.lineTotal;
+  return cartLineGross(item) - cartLineDiscount(item);
 }
 
 function canNotify() {
@@ -71,6 +116,264 @@ function StatusIcon({ status, loading }) {
   if (status === "ready" || status === "delivered") return <CheckCircle2 size={18} />;
   if (status === "pending" || status === "preparing") return <Clock3 size={18} />;
   return <Sparkles size={18} />;
+}
+
+function MenuItemIcon({ item }) {
+  const category = item.category.toLowerCase();
+  const name = item.name.toLowerCase();
+
+  if (category.includes("pizza")) return <Pizza size={24} />;
+  if (category.includes("cocktail") || category.includes("bucket") || name.includes("bucket")) return <Martini size={24} />;
+  if (category.includes("bottle") || name.includes("beer") || name.includes("soju")) return <Beer size={24} />;
+  if (category.includes("soft") || name.includes("water") || name.includes("juice") || name.includes("shake")) {
+    return <CupSoda size={24} />;
+  }
+  if (category.includes("shot") || category.includes("long drink")) return <GlassWater size={24} />;
+  if (category.includes("curry") || category.includes("soup") || name.includes("soup")) return <Soup size={24} />;
+  if (category.includes("western") || name.includes("chicken") || name.includes("burger")) return <Drumstick size={24} />;
+  if (category.includes("noodle") || category.includes("rice")) return <CookingPot size={24} />;
+
+  return <Utensils size={24} />;
+}
+
+function defaultSelectedOptions(item) {
+  return (item?.optionGroups || []).map((group) => ({
+    name: group.name,
+    value: group.values?.[0] || ""
+  }));
+}
+
+function optionsLabel(options) {
+  return options?.length ? options.map((option) => option.value).join(" / ") : "";
+}
+
+function PromoCustomizer({ promo, menu, onClose, onAddPromo }) {
+  const kind = inferPromotionKind(promo);
+  const thaiItems = menu.items.filter((item) => ["Noodle Dishes", "Curries & Soups", "Rice & Salad"].includes(item.category));
+  const bucketItems = menu.items.filter((item) => item.category.toLowerCase().includes("bucket") || item.name.toLowerCase().includes("bucket"));
+  const pizzaItems = menu.items.filter((item) => item.category === "Pizza");
+  const softDrinkItems = menu.items.filter((item) => item.category === "Soft Drinks");
+  const singha = menu.items.find((item) => item.id === "bottles-singha-beer") || menu.items.find((item) => item.name.includes("Singha"));
+  const [thaiId, setThaiId] = useState(thaiItems[0]?.id || "");
+  const [firstBucketId, setFirstBucketId] = useState(bucketItems[0]?.id || "");
+  const [secondBucketId, setSecondBucketId] = useState(bucketItems[0]?.id || "");
+  const [firstBucketOptions, setFirstBucketOptions] = useState(() => defaultSelectedOptions(bucketItems[0]));
+  const [secondBucketOptions, setSecondBucketOptions] = useState(() => defaultSelectedOptions(bucketItems[0]));
+  const [pizzaId, setPizzaId] = useState(pizzaItems[0]?.id || "");
+  const [softDrinkId, setSoftDrinkId] = useState(
+    softDrinkItems.find((item) => item.id === "soft-drinks-soft-drinks-coke-sprite-fanta")?.id || softDrinkItems[0]?.id || ""
+  );
+
+  const firstBucket = menu.items.find((item) => item.id === firstBucketId);
+  const secondBucket = menu.items.find((item) => item.id === secondBucketId);
+  const selectedThai = menu.items.find((item) => item.id === thaiId);
+  const selectedPizza = menu.items.find((item) => item.id === pizzaId);
+  const selectedSoftDrink = menu.items.find((item) => item.id === softDrinkId);
+
+  function selectBucket(which, itemId) {
+    const item = menu.items.find((menuItem) => menuItem.id === itemId);
+    if (which === "first") {
+      setFirstBucketId(itemId);
+      setFirstBucketOptions(defaultSelectedOptions(item));
+    } else {
+      setSecondBucketId(itemId);
+      setSecondBucketOptions(defaultSelectedOptions(item));
+    }
+  }
+
+  function updateBucketOption(which, groupName, value) {
+    const setter = which === "first" ? setFirstBucketOptions : setSecondBucketOptions;
+    setter((current) =>
+      current.map((option) => (option.name === groupName ? { ...option, value } : option))
+    );
+  }
+
+  function addPromotion() {
+    if (!["free_thai_food", "bucket_bogo", "pizza_soft_drink"].includes(kind)) return;
+
+    let choices = {};
+    let option = "";
+    let subtotal = 0;
+    let discountAmount = 0;
+
+    if (kind === "free_thai_food") {
+      if (!singha || !selectedThai) return;
+      choices = { paidItemId: singha.id, freeItemId: selectedThai.id };
+      option = `${singha.name} + ${selectedThai.name}`;
+      subtotal = singha.price + selectedThai.price;
+      discountAmount = selectedThai.price;
+    }
+
+    if (kind === "bucket_bogo") {
+      if (!firstBucket || !secondBucket) return;
+      choices = {
+        first: { menuItemId: firstBucket.id, options: firstBucketOptions },
+        second: { menuItemId: secondBucket.id, options: secondBucketOptions }
+      };
+      option = `${firstBucket.name} ${optionsLabel(firstBucketOptions)} + ${secondBucket.name} ${optionsLabel(secondBucketOptions)}`;
+      subtotal = firstBucket.price + secondBucket.price;
+      discountAmount = Math.min(firstBucket.price, secondBucket.price);
+    }
+
+    if (kind === "pizza_soft_drink") {
+      if (!selectedPizza || !selectedSoftDrink) return;
+      choices = { pizzaItemId: selectedPizza.id, softDrinkItemId: selectedSoftDrink.id };
+      option = `${selectedPizza.name} + ${selectedSoftDrink.name}`;
+      subtotal = selectedPizza.price + selectedSoftDrink.price;
+      discountAmount = selectedSoftDrink.price;
+    }
+
+    const lineTotal = subtotal - discountAmount;
+    const cartKey = `promo:${promo.id}:${JSON.stringify(choices)}`;
+    onAddPromo({
+      id: cartKey,
+      cartKey,
+      promoId: promo.id,
+      promoKind: kind,
+      choices,
+      name: promo.title,
+      option,
+      quantity: 1,
+      price: subtotal,
+      subtotal,
+      discountAmount,
+      lineTotal
+    });
+    onClose();
+  }
+
+  return (
+    <div className="promo-modal-overlay" role="dialog" aria-modal="true" aria-label={promo.title}>
+      <section className="promo-modal">
+        <div className="promo-modal-head">
+          <div>
+            <p className="eyebrow">Promotion</p>
+            <h2>{promo.title}</h2>
+            <span>{promotionScheduleLabel(promo)}</span>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close promotion">
+            <X size={17} />
+          </button>
+        </div>
+        <p>{promo.description}</p>
+
+        {kind === "free_thai_food" ? (
+          <div className="promo-builder">
+            <div className="promo-fixed-line">
+              <span>Included</span>
+              <strong>{singha?.name || "Singha Beer"}</strong>
+            </div>
+            <label className="item-option">
+              <span>Choose your free Thai food</span>
+              <select value={thaiId} onChange={(event) => setThaiId(event.target.value)}>
+                {thaiItems.map((item) => (
+                  <option value={item.id} key={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
+
+        {kind === "bucket_bogo" ? (
+          <div className="promo-builder">
+            {[
+              { label: "First bucket", value: firstBucketId, options: firstBucketOptions, which: "first", item: firstBucket },
+              { label: "Free bucket", value: secondBucketId, options: secondBucketOptions, which: "second", item: secondBucket }
+            ].map((bucket) => (
+              <div className="promo-choice-card" key={bucket.which}>
+                <label className="item-option">
+                  <span>{bucket.label}</span>
+                  <select value={bucket.value} onChange={(event) => selectBucket(bucket.which, event.target.value)}>
+                    {bucketItems.map((item) => (
+                      <option value={item.id} key={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                {bucket.item?.optionGroups?.length ? (
+                  <div className="item-option-groups">
+                    {bucket.item.optionGroups.map((group) => (
+                      <label className="item-option" key={group.name}>
+                        <span>{group.name}</span>
+                        <select
+                          value={bucket.options.find((option) => option.name === group.name)?.value || group.values?.[0] || ""}
+                          onChange={(event) => updateBucketOption(bucket.which, group.name, event.target.value)}
+                        >
+                          {group.values.map((choice) => (
+                            <option value={choice} key={choice}>{choice}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {kind === "pizza_soft_drink" ? (
+          <div className="promo-builder">
+            <label className="item-option">
+              <span>Choose your pizza</span>
+              <select value={pizzaId} onChange={(event) => setPizzaId(event.target.value)}>
+                {pizzaItems.map((item) => (
+                  <option value={item.id} key={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="item-option">
+              <span>Soft drink</span>
+              <select value={softDrinkId} onChange={(event) => setSoftDrinkId(event.target.value)}>
+                {softDrinkItems.map((item) => (
+                  <option value={item.id} key={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
+
+        {!["free_thai_food", "bucket_bogo", "pizza_soft_drink"].includes(kind) ? (
+          <div className="promo-message">This promotion needs a supported combo type before it can be ordered.</div>
+        ) : null}
+
+        <button
+          className="scan-button promo-add-button"
+          type="button"
+          onClick={addPromotion}
+          disabled={!["free_thai_food", "bucket_bogo", "pizza_soft_drink"].includes(kind)}
+        >
+          <Plus size={20} />
+          <span>Add promotion</span>
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function menuIconTone(item) {
+  const category = item.category.toLowerCase();
+  const name = item.name.toLowerCase();
+
+  if (
+    category.includes("bottle") ||
+    category.includes("soft") ||
+    category.includes("cocktail") ||
+    category.includes("bucket") ||
+    category.includes("shot") ||
+    category.includes("long drink") ||
+    name.includes("beer") ||
+    name.includes("water") ||
+    name.includes("juice")
+  ) {
+    return "drink";
+  }
+
+  if (category.includes("pizza")) return "pizza";
+  if (category.includes("curry") || category.includes("soup") || category.includes("noodle") || category.includes("rice")) {
+    return "thai";
+  }
+
+  return "food";
 }
 
 async function showLocalOrderNotification(order) {
@@ -178,14 +481,118 @@ function NameGate({ initialName, onContinue }) {
   );
 }
 
-function MenuView({ customerName, menu, cart, onAdd, onRemove, onCheckout, onOpenOrder, order }) {
+function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
+  const promoTrackRef = useRef(null);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [activePromoIndex, setActivePromoIndex] = useState(0);
+  const [activePromo, setActivePromo] = useState(null);
+  const [promoMessage, setPromoMessage] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState({});
+  const [selectedOptionGroups, setSelectedOptionGroups] = useState({});
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => {
-    const gross = item.price * item.quantity;
-    const discount = gross * ((item.discountPercent || 0) / 100);
-    return sum + gross - discount;
+    return sum + cartLineTotal(item);
   }, 0);
   const categories = [...new Set(menu.items.map((item) => item.category))];
+  const filteredItems = menu.items.filter((item) => {
+    const query = search.trim().toLowerCase();
+    const matchesCategory = activeCategory === "All" || item.category === activeCategory;
+    const matchesSearch =
+      !query ||
+      [
+        item.name,
+        item.description,
+        item.category,
+        ...(item.options || []),
+        ...(item.ingredients || []),
+        ...(item.optionGroups || []).flatMap((group) => [group.name, ...(group.values || [])])
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+
+    return matchesCategory && matchesSearch;
+  });
+  const visibleCategories = categories.filter((category) => filteredItems.some((item) => item.category === category));
+
+  function optionFor(item) {
+    return selectedOptions[item.id] || item.options?.[0] || "";
+  }
+
+  function optionGroupsFor(item) {
+    return (item.optionGroups || []).map((group) => ({
+      name: group.name,
+      value: selectedOptionGroups[item.id]?.[group.name] || group.values?.[0] || ""
+    }));
+  }
+
+  function itemSelectionFor(item) {
+    return {
+      option: optionFor(item),
+      options: optionGroupsFor(item)
+    };
+  }
+
+  function selectionKey(item) {
+    const selection = itemSelectionFor(item);
+    if (selection.options.length > 0) {
+      return selection.options.map((option) => `${option.name}:${option.value}`).join("|");
+    }
+
+    return selection.option;
+  }
+
+  function quantityFor(item) {
+    const key = `${item.id}:${selectionKey(item)}`;
+    return cart.find((cartItem) => cartItem.cartKey === key)?.quantity || 0;
+  }
+
+  function scrollToPromo(index) {
+    const track = promoTrackRef.current;
+    const card = track?.children[index];
+    if (!track || !card) return;
+
+    card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    setActivePromoIndex(index);
+  }
+
+  useEffect(() => {
+    if (menu.promotions.length < 2) return undefined;
+
+    const timer = window.setInterval(() => {
+      setActivePromoIndex((current) => {
+        const next = (current + 1) % menu.promotions.length;
+        const track = promoTrackRef.current;
+        const card = track?.children[next];
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+        return next;
+      });
+    }, 5500);
+
+    return () => window.clearInterval(timer);
+  }, [menu.promotions.length]);
+
+  function handlePromoScroll() {
+    const track = promoTrackRef.current;
+    const firstCard = track?.children[0];
+    if (!track || !firstCard) return;
+
+    const step = firstCard.getBoundingClientRect().width + 14;
+    const index = Math.round(track.scrollLeft / step);
+    setActivePromoIndex(Math.max(0, Math.min(menu.promotions.length - 1, index)));
+  }
+
+  function handlePromotionClick(promo) {
+    if (!promo.isAvailableNow) {
+      setPromoMessage(`${promo.title} is available ${promotionScheduleLabel(promo)}.`);
+      window.setTimeout(() => setPromoMessage(""), 3600);
+      return;
+    }
+
+    setPromoMessage("");
+    setActivePromo(promo);
+  }
 
   return (
     <main className="menu-page">
@@ -200,47 +607,155 @@ function MenuView({ customerName, menu, cart, onAdd, onRemove, onCheckout, onOpe
         </button>
       </header>
 
-      <section className="promo-carousel" aria-label="Promotions">
-        {menu.promotions.map((promo) => (
-          <button className={`promo-card promo-${promo.accent}`} type="button" key={promo.id} onClick={() => onAdd(promo.itemId)}>
-            <span>Promo</span>
-            <strong>{promo.title}</strong>
-            <small>{promo.subtitle}</small>
-          </button>
-        ))}
+      <section className="promo-area" aria-label="Promotions">
+        <div className="promo-carousel" ref={promoTrackRef} onScroll={handlePromoScroll}>
+          {menu.promotions.map((promo) => (
+            <button
+              className={
+                promo.isAvailableNow
+                  ? `promo-card promo-${promo.accent}`
+                  : `promo-card promo-${promo.accent} promo-card-locked`
+              }
+              type="button"
+              key={promo.id}
+              onClick={() => handlePromotionClick(promo)}
+            >
+              {promo.imageDataUrl ? <img src={promo.imageDataUrl} alt="" aria-hidden="true" /> : null}
+              <span>{promo.isAvailableNow ? promotionScheduleLabel(promo) : `Soon · ${promotionScheduleLabel(promo)}`}</span>
+              <strong>{promo.title}</strong>
+              <small>{promo.description}</small>
+            </button>
+          ))}
+        </div>
+        {menu.promotions.length > 1 ? (
+          <div className="promo-dots" aria-label="Promotion slides">
+            {menu.promotions.map((promo, index) => (
+              <button
+                className={activePromoIndex === index ? "promo-dot promo-dot-active" : "promo-dot"}
+                type="button"
+                key={promo.id}
+                onClick={() => scrollToPromo(index)}
+                aria-label={`Show promotion ${index + 1}`}
+              />
+            ))}
+          </div>
+        ) : null}
+        {promoMessage ? <div className="promo-message" role="status">{promoMessage}</div> : null}
+      </section>
+
+      <section className="menu-tools" aria-label="Menu filters">
+        <label className="menu-search">
+          <Search size={18} />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search food or drinks"
+            type="search"
+          />
+        </label>
+        <div className="category-chips" aria-label="Categories">
+          {["All", ...categories].map((category) => (
+            <button
+              className={activeCategory === category ? "category-chip category-chip-active" : "category-chip"}
+              key={category}
+              type="button"
+              onClick={() => setActiveCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="menu-list" aria-label="Menu">
-        {categories.map((category) => (
+        {visibleCategories.map((category) => (
           <div className="menu-category" key={category}>
             <h2>{category}</h2>
             <div className="menu-items">
-              {menu.items
+              {filteredItems
                 .filter((item) => item.category === category)
                 .map((item) => {
-                  const quantity = cart.find((cartItem) => cartItem.id === item.id)?.quantity || 0;
+                  const option = optionFor(item);
+                  const optionGroups = optionGroupsFor(item);
+                  const quantity = quantityFor(item);
 
                   return (
                     <article className="menu-item-card" key={item.id}>
-                      <div className="menu-item-icon">
-                        <Utensils size={24} />
+                      <div className={`menu-item-icon menu-item-icon-${menuIconTone(item)}`}>
+                        <MenuItemIcon item={item} />
                       </div>
                       <div className="menu-item-copy">
                         <div>
                           <h3>{item.name}</h3>
-                          <p>{item.description}</p>
+                          <p>
+                            {item.description ||
+                              (item.ingredients?.length ? item.ingredients.join(", ") : "Phangan Arena favorite")}
+                          </p>
                         </div>
+                        {item.options?.length ? (
+                          <label className="item-option">
+                            <span>Option</span>
+                            <select
+                              value={option}
+                              onChange={(event) =>
+                                setSelectedOptions((current) => ({ ...current, [item.id]: event.target.value }))
+                              }
+                            >
+                              {item.options.map((choice) => (
+                                <option value={choice} key={choice}>
+                                  {choice}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {item.optionGroups?.length ? (
+                          <div className="item-option-groups">
+                            {item.optionGroups.map((group) => (
+                              <label className="item-option" key={group.name}>
+                                <span>{group.name}</span>
+                                <select
+                                  value={selectedOptionGroups[item.id]?.[group.name] || group.values?.[0] || ""}
+                                  onChange={(event) =>
+                                    setSelectedOptionGroups((current) => ({
+                                      ...current,
+                                      [item.id]: {
+                                        ...(current[item.id] || {}),
+                                        [group.name]: event.target.value
+                                      }
+                                    }))
+                                  }
+                                >
+                                  {group.values.map((choice) => (
+                                    <option value={choice} key={choice}>
+                                      {choice}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="menu-item-meta">
                           <strong>{money(item.price)}</strong>
                           {item.discountPercent ? <span>{item.discountPercent}% off</span> : null}
                         </div>
                       </div>
                       <div className="quantity-control">
-                        <button type="button" onClick={() => onRemove(item.id)} disabled={!quantity} aria-label={`Remove ${item.name}`}>
+                        <button
+                          type="button"
+                          onClick={() => onRemove(item.id, option, optionGroups)}
+                          disabled={!quantity}
+                          aria-label={`Remove ${item.name}`}
+                        >
                           <Minus size={16} />
                         </button>
                         <span>{quantity}</span>
-                        <button type="button" onClick={() => onAdd(item.id)} aria-label={`Add ${item.name}`}>
+                        <button
+                          type="button"
+                          onClick={() => onAdd(item.id, option, optionGroups)}
+                          aria-label={`Add ${item.name}`}
+                        >
                           <Plus size={16} />
                         </button>
                       </div>
@@ -250,6 +765,7 @@ function MenuView({ customerName, menu, cart, onAdd, onRemove, onCheckout, onOpe
             </div>
           </div>
         ))}
+        {filteredItems.length === 0 ? <div className="menu-empty">No items found</div> : null}
       </section>
 
       <div className="sticky-cart">
@@ -258,19 +774,24 @@ function MenuView({ customerName, menu, cart, onAdd, onRemove, onCheckout, onOpe
           <strong>{money(cartTotal)}</strong>
         </div>
         <button type="button" onClick={onCheckout} disabled={!cartCount}>
-          Confirm order
+          View order
         </button>
       </div>
+      {activePromo ? (
+        <PromoCustomizer
+          promo={activePromo}
+          menu={menu}
+          onClose={() => setActivePromo(null)}
+          onAddPromo={onAddPromo}
+        />
+      ) : null}
     </main>
   );
 }
 
-function ConfirmView({ cart, onBack, onFinish, busy }) {
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discountTotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity * ((item.discountPercent || 0) / 100),
-    0
-  );
+function ConfirmView({ cart, notes, onNotesChange, onBack, onAddItem, onRemoveItem, onDeleteItem, onFinish, busy }) {
+  const subtotal = cart.reduce((sum, item) => sum + cartLineGross(item), 0);
+  const discountTotal = cart.reduce((sum, item) => sum + cartLineDiscount(item), 0);
   const total = subtotal - discountTotal;
 
   return (
@@ -286,24 +807,52 @@ function ConfirmView({ cart, onBack, onFinish, busy }) {
         </div>
       </header>
       <section className="confirm-panel">
+        {cart.length === 0 ? <div className="menu-empty">Your order is empty</div> : null}
         {cart.map((item) => (
-          <div className="confirm-row" key={item.id}>
+          <div className="confirm-row" key={item.cartKey}>
             <div>
               <strong>{item.name}</strong>
-              <span>Qty {item.quantity}</span>
+              <span>{item.option ? `${item.option} · ` : ""}Qty {item.quantity}</span>
             </div>
-            <span>{money(item.price * item.quantity * (1 - (item.discountPercent || 0) / 100))}</span>
+            <span>{money(cartLineTotal(item))}</span>
+            <div className="confirm-item-actions">
+              <button type="button" onClick={() => onRemoveItem(item.cartKey)} aria-label={`Remove one ${item.name}`}>
+                <Minus size={15} />
+              </button>
+              <strong>{item.quantity}</strong>
+              <button type="button" onClick={() => onAddItem(item.cartKey)} aria-label={`Add one ${item.name}`}>
+                <Plus size={15} />
+              </button>
+              <button
+                className="confirm-delete-button"
+                type="button"
+                onClick={() => onDeleteItem(item.cartKey)}
+                aria-label={`Delete ${item.name}`}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
           </div>
         ))}
+        <label className="order-notes">
+          <span>Special instructions</span>
+          <textarea
+            value={notes}
+            onChange={(event) => onNotesChange(event.target.value)}
+            placeholder="Anything we should know?"
+            maxLength={280}
+            rows={3}
+          />
+        </label>
         <div className="totals-box">
           <span>Subtotal <strong>{money(subtotal)}</strong></span>
           <span>Discounts <strong>-{money(discountTotal)}</strong></span>
           <span>Total <strong>{money(total)}</strong></span>
         </div>
       </section>
-      <button className="finish-order-button" type="button" onClick={onFinish} disabled={busy}>
+      <button className="finish-order-button" type="button" onClick={onFinish} disabled={busy || cart.length === 0}>
         {busy ? <Loader2 className="spin" size={20} /> : <CheckCircle2 size={20} />}
-        <span>Finish order</span>
+        <span>Confirm order</span>
       </button>
     </main>
   );
@@ -344,8 +893,8 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
 
           <div className="order-receipt">
             {(order.items || []).map((item) => (
-              <div className="receipt-row" key={item.menuItemId}>
-                <span>{item.quantity}x {item.name}</span>
+              <div className="receipt-row" key={`${item.menuItemId}-${item.option || ""}`}>
+                <span>{item.quantity}x {item.name}{item.option ? ` · ${item.option}` : ""}</span>
                 <strong>{money(item.lineTotal)}</strong>
               </div>
             ))}
@@ -357,6 +906,12 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
               <span>Paid</span>
               <strong>{money(order.total)}</strong>
             </div>
+            {order.notes ? (
+              <div className="receipt-note">
+                <span>Note</span>
+                <p>{order.notes}</p>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -389,6 +944,7 @@ export default function CustomerApp() {
   const [customerName, setCustomerName] = useState(() => localStorage.getItem(NAME_KEY) || "");
   const [menu, setMenu] = useState({ promotions: [], items: [] });
   const [cart, setCart] = useState([]);
+  const [notes, setNotes] = useState("");
   const [order, setOrder] = useState(null);
   const [view, setView] = useState(customerName ? "menu" : "name");
   const [loading, setLoading] = useState(false);
@@ -477,26 +1033,107 @@ export default function CustomerApp() {
     checkPushState().catch(() => {});
   }, [deviceId]);
 
-  function addItem(itemId) {
+  function addItem(itemId, option = "", options = []) {
     const item = menu.items.find((menuItem) => menuItem.id === itemId);
     if (!item) return;
+    const cleanOption = option || item.options?.[0] || "";
+    const selectedOptions = options.filter((selected) => selected.name && selected.value);
+    const selectionKey =
+      selectedOptions.length > 0 ? selectedOptions.map((selected) => `${selected.name}:${selected.value}`).join("|") : cleanOption;
+    const cartKey = `${itemId}:${selectionKey}`;
     setCart((current) => {
-      const existing = current.find((cartItem) => cartItem.id === itemId);
+      const existing = current.find((cartItem) => cartItem.cartKey === cartKey);
       if (existing) {
         return current.map((cartItem) =>
-          cartItem.id === itemId ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+          cartItem.cartKey === cartKey ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
         );
       }
-      return [...current, { ...item, quantity: 1 }];
+      return [
+        ...current,
+        {
+          ...item,
+          option: selectedOptions.length ? selectedOptions.map((selected) => selected.value).join(" / ") : cleanOption,
+          options: selectedOptions,
+          cartKey,
+          quantity: 1
+        }
+      ];
     });
   }
 
-  function removeItem(itemId) {
+  function removeItem(itemId, option = "", options = []) {
+    const selectedOptions = options.filter((selected) => selected.name && selected.value);
+    const selectionKey =
+      selectedOptions.length > 0 ? selectedOptions.map((selected) => `${selected.name}:${selected.value}`).join("|") : option;
+    const cartKey = `${itemId}:${selectionKey}`;
     setCart((current) =>
       current
-        .map((item) => (item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item))
+        .map((item) => (item.cartKey === cartKey ? { ...item, quantity: item.quantity - 1 } : item))
         .filter((item) => item.quantity > 0)
     );
+  }
+
+  function addCartItem(cartKey) {
+    setCart((current) =>
+      current.map((item) =>
+        item.cartKey === cartKey
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+              subtotal: typeof item.subtotal === "number" ? (item.subtotal / item.quantity) * (item.quantity + 1) : undefined,
+              discountAmount:
+                typeof item.discountAmount === "number"
+                  ? (item.discountAmount / item.quantity) * (item.quantity + 1)
+                  : undefined,
+              lineTotal: typeof item.lineTotal === "number" ? (item.lineTotal / item.quantity) * (item.quantity + 1) : undefined
+            }
+          : item
+      )
+    );
+  }
+
+  function removeCartItem(cartKey) {
+    setCart((current) =>
+      current
+        .map((item) =>
+          item.cartKey === cartKey
+            ? {
+                ...item,
+                quantity: item.quantity - 1,
+                subtotal: typeof item.subtotal === "number" ? (item.subtotal / item.quantity) * (item.quantity - 1) : undefined,
+                discountAmount:
+                  typeof item.discountAmount === "number"
+                    ? (item.discountAmount / item.quantity) * (item.quantity - 1)
+                    : undefined,
+                lineTotal: typeof item.lineTotal === "number" ? (item.lineTotal / item.quantity) * (item.quantity - 1) : undefined
+              }
+            : item
+        )
+        .filter((item) => item.quantity > 0)
+    );
+  }
+
+  function deleteCartItem(cartKey) {
+    setCart((current) => current.filter((item) => item.cartKey !== cartKey));
+  }
+
+  function addPromotionItem(promoItem) {
+    setCart((current) => {
+      const existing = current.find((item) => item.cartKey === promoItem.cartKey);
+      if (!existing) return [...current, promoItem];
+
+      return current.map((item) =>
+        item.cartKey === promoItem.cartKey
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+              subtotal: item.subtotal + promoItem.subtotal,
+              discountAmount: item.discountAmount + promoItem.discountAmount,
+              lineTotal: item.lineTotal + promoItem.lineTotal
+            }
+          : item
+      );
+    });
   }
 
   async function finishOrder() {
@@ -505,10 +1142,19 @@ export default function CustomerApp() {
       const data = await api.createCustomerOrder({
         customerName,
         deviceId,
-        items: cart.map((item) => ({ menuItemId: item.id, quantity: item.quantity }))
+        notes,
+        items: cart.map((item) => ({
+          promoId: item.promoId,
+          choices: item.choices,
+          menuItemId: item.id,
+          option: item.options?.length ? "" : item.option,
+          options: item.options || [],
+          quantity: item.quantity
+        }))
       });
       setOrder(data.order);
       setCart([]);
+      setNotes("");
       setView("order");
       if (showNotificationButton) enableNotifications().catch(() => {});
     } finally {
@@ -521,7 +1167,19 @@ export default function CustomerApp() {
   }
 
   if (view === "confirm") {
-    return <ConfirmView cart={cart} onBack={() => setView("menu")} onFinish={finishOrder} busy={loading} />;
+    return (
+      <ConfirmView
+        cart={cart}
+        notes={notes}
+        onNotesChange={setNotes}
+        onBack={() => setView("menu")}
+        onAddItem={addCartItem}
+        onRemoveItem={removeCartItem}
+        onDeleteItem={deleteCartItem}
+        onFinish={finishOrder}
+        busy={loading}
+      />
+    );
   }
 
   if (view === "order" && order) {
@@ -544,6 +1202,7 @@ export default function CustomerApp() {
       menu={menu}
       cart={cart}
       onAdd={addItem}
+      onAddPromo={addPromotionItem}
       onRemove={removeItem}
       onCheckout={() => setView("confirm")}
       onOpenOrder={() => order && setView("order")}
