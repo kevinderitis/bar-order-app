@@ -30,12 +30,10 @@ import { getDeviceId } from "../lib/device.js";
 
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
-const PROMO_COLLAPSE_DISTANCE = 250;
-const PROMO_HIDE_SCROLL_DAMPING = 0.72;
-const PROMO_SHOW_SCROLL_DAMPING = 0.42;
-const PROMO_EXPANDED_HEIGHT = 218;
-const PROMO_EXPANDED_MARGIN = 26;
-const PROMO_COLLAPSED_MARGIN = 6;
+const PROMO_COLLAPSE_DISTANCE = 220;
+const PROMO_EXPANDED_HEIGHT = 176;
+const PROMO_EXPANDED_MARGIN = 8;
+const PROMO_COLLAPSED_MARGIN = 2;
 
 function isRunningInstalled() {
   return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
@@ -559,6 +557,7 @@ function NameGate({ initialName, onContinue }) {
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
   const menuTouchYRef = useRef(null);
+  const promoCollapseProgressRef = useRef(0);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
@@ -681,28 +680,40 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   }
 
   function handleMenuScroll(event) {
-    const nextTop = event.currentTarget.scrollTop;
-    const nextProgress = Math.min(1, Math.max(0, nextTop / PROMO_COLLAPSE_DISTANCE));
-
-    setPromoCollapseProgress(Number(nextProgress.toFixed(3)));
+    if (promoCollapseProgressRef.current < 1 && event.currentTarget.scrollTop > 0) {
+      event.currentTarget.scrollTop = 0;
+    }
   }
 
-  function shouldDampenMenuScroll(scrollTop, delta) {
-    if (delta > 0) return scrollTop < PROMO_COLLAPSE_DISTANCE;
-    if (delta < 0) return scrollTop <= PROMO_COLLAPSE_DISTANCE;
-    return false;
+  function updatePromoCollapseProgress(nextProgress) {
+    const safeProgress = Math.min(1, Math.max(0, nextProgress));
+    const roundedProgress = Number(safeProgress.toFixed(3));
+
+    promoCollapseProgressRef.current = roundedProgress;
+    setPromoCollapseProgress(roundedProgress);
   }
 
-  function dampenMenuScroll(element, delta) {
-    const damping = delta > 0 ? PROMO_HIDE_SCROLL_DAMPING : PROMO_SHOW_SCROLL_DAMPING;
-    element.scrollTop += delta * damping;
+  function consumePromoScroll(element, delta) {
+    const currentProgress = promoCollapseProgressRef.current;
+    const shouldHidePromo = delta > 0 && currentProgress < 1;
+    const shouldShowPromo = delta < 0 && element.scrollTop <= 0 && currentProgress > 0;
+
+    if (!shouldHidePromo && !shouldShowPromo) return false;
+
+    updatePromoCollapseProgress(currentProgress + delta / PROMO_COLLAPSE_DISTANCE);
+    return true;
+  }
+
+  function stopScrollEvent(event) {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
   }
 
   function handleMenuWheel(event) {
-    if (!shouldDampenMenuScroll(event.currentTarget.scrollTop, event.deltaY)) return;
+    if (!consumePromoScroll(event.currentTarget, event.deltaY)) return;
 
-    event.preventDefault();
-    dampenMenuScroll(event.currentTarget, event.deltaY);
+    stopScrollEvent(event);
   }
 
   function handleMenuTouchStart(event) {
@@ -717,10 +728,9 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     const delta = previousY - currentY;
     menuTouchYRef.current = currentY;
 
-    if (!shouldDampenMenuScroll(event.currentTarget.scrollTop, delta)) return;
+    if (!consumePromoScroll(event.currentTarget, delta)) return;
 
-    event.preventDefault();
-    dampenMenuScroll(event.currentTarget, delta);
+    stopScrollEvent(event);
   }
 
   function handlePromotionClick(promo) {

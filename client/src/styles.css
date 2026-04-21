@@ -2614,7 +2614,18 @@ button:disabled {
   }
 
   .promo-card {
+    min-height: 146px;
+    padding: 16px;
+    border-radius: 22px;
     width: 100%;
+  }
+
+  .promo-card strong {
+    font-size: 1.42rem;
+  }
+
+  .promo-card small {
+    font-size: 0.84rem;
   }
 
   .menu-tools {
