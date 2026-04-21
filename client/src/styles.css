@@ -188,6 +188,8 @@ button:disabled {
 
 .menu-header,
 .confirm-header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -220,6 +222,8 @@ button:disabled {
 }
 
 .promo-area {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: 1fr;
   gap: 10px;
@@ -227,11 +231,12 @@ button:disabled {
   overflow: hidden;
   margin: 0 auto 26px;
   transform-origin: top center;
+  will-change: grid-template-rows, margin, opacity, transform;
   transition:
-    grid-template-rows 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    margin 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 180ms ease,
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    grid-template-rows 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 300ms ease,
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .promo-area-content {
@@ -239,10 +244,11 @@ button:disabled {
   gap: 10px;
   min-height: 0;
   overflow: hidden;
+  will-change: opacity, transform, filter;
   transition:
-    opacity 180ms ease,
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 240ms ease;
+    opacity 300ms ease,
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 360ms ease;
 }
 
 .promo-area-collapsed {
@@ -250,13 +256,13 @@ button:disabled {
   margin-bottom: 6px;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-8px);
+  transform: translateY(-18px);
 }
 
 .promo-area-collapsed .promo-area-content {
   opacity: 0;
-  filter: blur(2px);
-  transform: translateY(-10px) scale(0.985);
+  filter: blur(3px);
+  transform: translateY(-42px) scale(0.97);
 }
 
 .promo-carousel {
@@ -2614,6 +2620,16 @@ button:disabled {
   .promo-area,
   .menu-tools {
     flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .promo-carousel {
+    grid-auto-columns: 100%;
+    gap: 0;
+    padding: 0;
+  }
+
+  .promo-card {
     width: 100%;
   }
 

@@ -553,6 +553,7 @@ function NameGate({ initialName, onContinue }) {
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
   const lastMenuScrollTopRef = useRef(0);
+  const upwardMenuScrollRef = useRef(0);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
@@ -669,7 +670,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     const firstCard = track?.children[0];
     if (!track || !firstCard) return;
 
-    const step = firstCard.getBoundingClientRect().width + 14;
+    const step = firstCard.getBoundingClientRect().width;
     const index = Math.round(track.scrollLeft / step);
     setActivePromoIndex(Math.max(0, Math.min(menu.promotions.length - 1, index)));
   }
@@ -677,11 +678,18 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   function handleMenuScroll(event) {
     const nextTop = event.currentTarget.scrollTop;
     const previousTop = lastMenuScrollTopRef.current;
+    const delta = nextTop - previousTop;
 
-    if (nextTop <= 2) {
-      setPromosCollapsed(false);
-    } else if (nextTop > previousTop) {
+    if (delta > 1) {
+      upwardMenuScrollRef.current = 0;
       setPromosCollapsed(true);
+    } else if (delta < -1) {
+      upwardMenuScrollRef.current += Math.abs(delta);
+    }
+
+    if (nextTop <= 6 && upwardMenuScrollRef.current >= 44) {
+      setPromosCollapsed(false);
+      upwardMenuScrollRef.current = 0;
     }
 
     lastMenuScrollTopRef.current = nextTop;
