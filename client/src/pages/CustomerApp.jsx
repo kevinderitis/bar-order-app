@@ -555,6 +555,7 @@ function NameGate({ initialName, onContinue }) {
 }
 
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
+  const menuListRef = useRef(null);
   const promoTrackRef = useRef(null);
   const menuTouchYRef = useRef(null);
   const lastMenuScrollTopRef = useRef(0);
@@ -563,6 +564,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
   const [promoCollapseProgress, setPromoCollapseProgress] = useState(0);
+  const [promoOpening, setPromoOpening] = useState(false);
   const [activePromo, setActivePromo] = useState(null);
   const [promoMessage, setPromoMessage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState({});
@@ -670,6 +672,19 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     return () => window.clearInterval(timer);
   }, [menu.promotions.length]);
 
+  useEffect(() => {
+    if (promoCollapseProgress < 1) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (menuListRef.current) {
+        menuListRef.current.scrollTop = 0;
+        lastMenuScrollTopRef.current = 0;
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [promoCollapseProgress]);
+
   function handlePromoScroll() {
     const track = promoTrackRef.current;
     const firstCard = track?.children[0];
@@ -702,8 +717,10 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   function updatePromoCollapseProgress(nextProgress) {
     const safeProgress = Math.min(1, Math.max(0, nextProgress));
     const roundedProgress = Number(safeProgress.toFixed(3));
+    const isOpening = roundedProgress < promoCollapseProgressRef.current;
 
     promoCollapseProgressRef.current = roundedProgress;
+    setPromoOpening(isOpening);
     setPromoCollapseProgress(roundedProgress);
   }
 
@@ -772,6 +789,14 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     setActivePromo(promo);
   }
 
+  const promoAreaClassName = [
+    "promo-area",
+    promoCollapseProgress >= 0.995 ? "promo-area-collapsed" : "",
+    promoOpening ? "promo-area-opening" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <main className="menu-page">
       <header className="menu-header">
@@ -786,7 +811,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
       </header>
 
       <section
-        className={promoCollapseProgress >= 0.995 ? "promo-area promo-area-collapsed" : "promo-area"}
+        className={promoAreaClassName}
         style={{
           "--promo-progress": promoCollapseProgress,
           "--promo-height": `${Math.round(PROMO_EXPANDED_HEIGHT * (1 - promoCollapseProgress))}px`,
@@ -862,6 +887,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
       </section>
 
       <section
+        ref={menuListRef}
         className="menu-list"
         aria-label="Menu"
         onScroll={handleMenuScroll}

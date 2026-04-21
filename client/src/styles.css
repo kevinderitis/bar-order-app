@@ -254,6 +254,16 @@ button:disabled {
   pointer-events: none;
 }
 
+.promo-area-opening {
+  transition-duration: 420ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.promo-area-opening .promo-area-content {
+  transition-duration: 420ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .promo-carousel {
   display: grid;
   grid-auto-flow: column;
@@ -2640,7 +2650,7 @@ button:disabled {
     position: relative;
     top: auto;
     z-index: 12;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
     padding: 10px 0 12px;
     background:
       linear-gradient(150deg, rgba(255, 232, 212, 0.96), rgba(255, 247, 239, 0.96) 52%, rgba(229, 244, 231, 0.92)),
