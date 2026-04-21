@@ -30,7 +30,8 @@ import { getDeviceId } from "../lib/device.js";
 
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
-const PROMO_COLLAPSE_DISTANCE = 170;
+const PROMO_COLLAPSE_DISTANCE = 250;
+const PROMO_SCROLL_DAMPING = 0.42;
 const PROMO_EXPANDED_HEIGHT = 218;
 const PROMO_EXPANDED_MARGIN = 26;
 const PROMO_COLLAPSED_MARGIN = 6;
@@ -556,6 +557,7 @@ function NameGate({ initialName, onContinue }) {
 
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
+  const menuTouchYRef = useRef(null);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
@@ -684,6 +686,41 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     setPromoCollapseProgress(Number(nextProgress.toFixed(3)));
   }
 
+  function shouldDampenMenuScroll(scrollTop, delta) {
+    if (delta > 0) return scrollTop < PROMO_COLLAPSE_DISTANCE;
+    if (delta < 0) return scrollTop <= PROMO_COLLAPSE_DISTANCE;
+    return false;
+  }
+
+  function dampenMenuScroll(element, delta) {
+    element.scrollTop += delta * PROMO_SCROLL_DAMPING;
+  }
+
+  function handleMenuWheel(event) {
+    if (!shouldDampenMenuScroll(event.currentTarget.scrollTop, event.deltaY)) return;
+
+    event.preventDefault();
+    dampenMenuScroll(event.currentTarget, event.deltaY);
+  }
+
+  function handleMenuTouchStart(event) {
+    menuTouchYRef.current = event.touches[0]?.clientY ?? null;
+  }
+
+  function handleMenuTouchMove(event) {
+    const currentY = event.touches[0]?.clientY;
+    const previousY = menuTouchYRef.current;
+    if (typeof currentY !== "number" || typeof previousY !== "number") return;
+
+    const delta = previousY - currentY;
+    menuTouchYRef.current = currentY;
+
+    if (!shouldDampenMenuScroll(event.currentTarget.scrollTop, delta)) return;
+
+    event.preventDefault();
+    dampenMenuScroll(event.currentTarget, delta);
+  }
+
   function handlePromotionClick(promo) {
     if (!promo.isAvailableNow) {
       setPromoMessage(`${promo.title} is available ${promotionScheduleLabel(promo)}.`);
@@ -786,7 +823,14 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
         </div>
       </section>
 
-      <section className="menu-list" aria-label="Menu" onScroll={handleMenuScroll}>
+      <section
+        className="menu-list"
+        aria-label="Menu"
+        onScroll={handleMenuScroll}
+        onTouchMove={handleMenuTouchMove}
+        onTouchStart={handleMenuTouchStart}
+        onWheel={handleMenuWheel}
+      >
         {visibleCategories.map((category) => (
           <div className="menu-category" key={category}>
             <h2>{category}</h2>
