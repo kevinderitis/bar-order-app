@@ -14,7 +14,7 @@ import BrandMark from "../components/BrandMark.jsx";
 import { api } from "../lib/api.js";
 
 const STATUSES = ["pending", "preparing", "ready", "delivered"];
-const TABS = ["orders", "menu", "promotions"];
+const TABS = ["orders", "menu", "extras", "promotions"];
 const ORDER_PAGE_SIZE = 10;
 
 const statusLabels = {
@@ -49,6 +49,18 @@ const emptyPromotionForm = {
   active: true,
   sortOrder: 0
 };
+
+const emptyExtraForm = {
+  name: "",
+  price: "",
+  active: true,
+  sortOrder: 0
+};
+
+function orderItemDetails(item) {
+  const extras = item.extras?.length ? `Extras: ${item.extras.map((extra) => extra.name).join(", ")}` : "";
+  return [item.option, extras].filter(Boolean).join(" · ");
+}
 
 function money(value) {
   return new Intl.NumberFormat("en-TH", {
@@ -194,8 +206,8 @@ function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
                     <div className="admin-order-expanded">
                       <div className="admin-order-items">
                         {order.items?.map((item) => (
-                          <div key={`${item.menuItemId}-${item.option || ""}`}>
-                            <span>{item.quantity}x {item.name}{item.option ? ` · ${item.option}` : ""}</span>
+                          <div key={`${item.menuItemId}-${item.option || ""}-${item.extras?.map((extra) => extra.extraId).join("-") || ""}`}>
+                            <span>{item.quantity}x {item.name}{orderItemDetails(item) ? ` · ${orderItemDetails(item)}` : ""}</span>
                             <strong>{money(item.lineTotal)}</strong>
                           </div>
                         ))}
@@ -401,6 +413,97 @@ function MenuSection({
   );
 }
 
+function ExtrasSection({
+  extras,
+  form,
+  editingId,
+  modalOpen,
+  setForm,
+  onSubmit,
+  onEdit,
+  onCreate,
+  onCancel,
+  onDelete,
+  onToggle
+}) {
+  return (
+    <section className="admin-list-section" aria-label="Extras editor">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Extras</p>
+          <h2>Food add-ons</h2>
+        </div>
+        <button className="admin-primary" type="button" onClick={onCreate}>
+          <PlusCircle size={17} />
+          <span>Create extra</span>
+        </button>
+      </div>
+
+      <div className="admin-menu-list">
+        {extras.map((extra) => (
+          <article className={extra.active ? "admin-menu-card" : "admin-menu-card admin-muted-card"} key={extra.id}>
+            <div>
+              <span>{extra.active ? "Active extra" : "Inactive extra"}</span>
+              <h3>{extra.name}</h3>
+              <p>Available for food items</p>
+            </div>
+            <strong>{money(extra.price)}</strong>
+            <div className="admin-card-actions">
+              <button className="admin-secondary" type="button" onClick={() => onToggle(extra)}>
+                {extra.active ? "Disable" : "Activate"}
+              </button>
+              <button className="admin-icon-button" type="button" onClick={() => onEdit(extra)} aria-label={`Edit ${extra.name}`}>
+                <Edit3 size={15} />
+              </button>
+              <button
+                className="admin-icon-button admin-danger-button"
+                type="button"
+                onClick={() => onDelete(extra)}
+                aria-label={`Delete ${extra.name}`}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {modalOpen ? (
+        <AdminModal title={editingId ? "Edit extra" : "Create extra"} eyebrow="Extras" onClose={onCancel}>
+          <form className="admin-editor-form" onSubmit={onSubmit}>
+            <label>
+              <span>Name</span>
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </label>
+            <label>
+              <span>Price</span>
+              <input
+                value={form.price}
+                onChange={(event) => setForm({ ...form, price: event.target.value })}
+                inputMode="decimal"
+              />
+            </label>
+            <div className="admin-checks">
+              <label>
+                <input
+                  checked={form.active}
+                  type="checkbox"
+                  onChange={(event) => setForm({ ...form, active: event.target.checked })}
+                />
+                <span>Active</span>
+              </label>
+            </div>
+            <button className="admin-primary" type="submit">
+              {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
+              <span>{editingId ? "Save extra" : "Create extra"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
+    </section>
+  );
+}
+
 function PromotionsSection({
   promotions,
   menuItems,
@@ -574,6 +677,7 @@ export default function AdminApp() {
   const [password, setPassword] = useState("");
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [extras, setExtras] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [activeTab, setActiveTab] = useState("orders");
   const [message, setMessage] = useState("");
@@ -581,6 +685,9 @@ export default function AdminApp() {
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [editingItemId, setEditingItemId] = useState("");
   const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [extraForm, setExtraForm] = useState(emptyExtraForm);
+  const [editingExtraId, setEditingExtraId] = useState("");
+  const [extraModalOpen, setExtraModalOpen] = useState(false);
   const [promotionForm, setPromotionForm] = useState(emptyPromotionForm);
   const [editingPromotionId, setEditingPromotionId] = useState("");
   const [promotionModalOpen, setPromotionModalOpen] = useState(false);
@@ -603,10 +710,16 @@ export default function AdminApp() {
     setPromotions(data.promotions);
   }, [token]);
 
+  const loadExtras = useCallback(async () => {
+    if (!token) return;
+    const data = await api.getAdminExtras(token);
+    setExtras(data.extras);
+  }, [token]);
+
   const loadAll = useCallback(async () => {
     if (!token) return;
     try {
-      await Promise.all([loadOrders(), loadMenu(), loadPromotions()]);
+      await Promise.all([loadOrders(), loadMenu(), loadExtras(), loadPromotions()]);
     } catch (error) {
       setMessage(error.message);
       if (error.message.includes("session") || error.message.includes("Authentication")) {
@@ -614,7 +727,7 @@ export default function AdminApp() {
         setToken("");
       }
     }
-  }, [loadMenu, loadOrders, loadPromotions, token]);
+  }, [loadExtras, loadMenu, loadOrders, loadPromotions, token]);
 
   useEffect(() => {
     loadAll();
@@ -677,6 +790,9 @@ export default function AdminApp() {
     localStorage.removeItem("ready-order-admin-token");
     setToken("");
     setOrders([]);
+    setMenuItems([]);
+    setExtras([]);
+    setPromotions([]);
   }
 
   function editItem(item) {
@@ -735,6 +851,61 @@ export default function AdminApp() {
       const data = await api.deleteMenuItem(token, item.id);
       setMessage(data.message);
       await loadMenu();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  function editExtra(extra) {
+    setEditingExtraId(extra.id);
+    setExtraModalOpen(true);
+    setExtraForm({
+      name: extra.name,
+      price: extra.price,
+      active: extra.active,
+      sortOrder: extra.sortOrder || 0
+    });
+  }
+
+  function createExtra() {
+    setEditingExtraId("");
+    setExtraForm(emptyExtraForm);
+    setExtraModalOpen(true);
+  }
+
+  async function submitExtra(event) {
+    event.preventDefault();
+    setMessage("");
+    try {
+      const data = editingExtraId
+        ? await api.updateExtra(token, editingExtraId, extraForm)
+        : await api.createExtra(token, extraForm);
+      setMessage(data.message);
+      setExtraForm(emptyExtraForm);
+      setEditingExtraId("");
+      setExtraModalOpen(false);
+      await loadExtras();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function toggleExtra(extra) {
+    try {
+      const data = await api.updateExtra(token, extra.id, { ...extra, active: !extra.active });
+      setMessage(data.message);
+      await loadExtras();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function deleteExtra(extra) {
+    if (!window.confirm(`Delete ${extra.name}?`)) return;
+    try {
+      const data = await api.deleteExtra(token, extra.id);
+      setMessage(data.message);
+      await loadExtras();
     } catch (error) {
       setMessage(error.message);
     }
@@ -880,6 +1051,26 @@ export default function AdminApp() {
           }}
           onDelete={deleteItem}
           onToggle={toggleItem}
+        />
+      ) : null}
+
+      {activeTab === "extras" ? (
+        <ExtrasSection
+          extras={extras}
+          form={extraForm}
+          editingId={editingExtraId}
+          modalOpen={extraModalOpen}
+          setForm={setExtraForm}
+          onSubmit={submitExtra}
+          onEdit={editExtra}
+          onCreate={createExtra}
+          onCancel={() => {
+            setEditingExtraId("");
+            setExtraForm(emptyExtraForm);
+            setExtraModalOpen(false);
+          }}
+          onDelete={deleteExtra}
+          onToggle={toggleExtra}
         />
       ) : null}
 

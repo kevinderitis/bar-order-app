@@ -178,6 +178,14 @@ export const defaultMenuItems = [
   })
 ];
 
+export const defaultExtras = [
+  { name: "Fried egg", price: 25, active: true, sortOrder: 10 },
+  { name: "Chicken", price: 40, active: true, sortOrder: 20 },
+  { name: "Vegetables", price: 30, active: true, sortOrder: 30 },
+  { name: "Cheese", price: 35, active: true, sortOrder: 40 },
+  { name: "Extra rice", price: 30, active: true, sortOrder: 50 }
+];
+
 export const defaultPromotions = [
   {
     title: "Free Thai Food",

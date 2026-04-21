@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { env } from "./env.js";
+import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Order } from "../models/Order.js";
 import { Promotion } from "../models/Promotion.js";
@@ -26,6 +27,7 @@ export async function connectDatabase() {
   mongoose.set("strictQuery", true);
   await mongoose.connect(env.mongodbUri);
   await dropLegacyStatusIndexIfNeeded();
+  await MenuExtra.init();
   await MenuItem.init();
   await Order.init();
   await Promotion.init();

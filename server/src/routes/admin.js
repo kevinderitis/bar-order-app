@@ -3,6 +3,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Order, ORDER_STATUSES } from "../models/Order.js";
 import { PROMOTION_ACCENTS, Promotion } from "../models/Promotion.js";
@@ -90,6 +91,18 @@ function serializePromotion(promotion) {
   };
 }
 
+function serializeExtra(extra) {
+  return {
+    id: extra._id.toString(),
+    name: extra.name,
+    price: extra.price,
+    active: extra.active,
+    sortOrder: extra.sortOrder,
+    createdAt: extra.createdAt,
+    updatedAt: extra.updatedAt
+  };
+}
+
 function menuItemPayload(body) {
   const name = String(body.name || "").trim();
   const category = String(body.category || "").trim();
@@ -144,6 +157,21 @@ function promotionPayload(body) {
     kind,
     imageDataUrl: String(body.imageDataUrl || "").trim(),
     accent: PROMOTION_ACCENTS.includes(body.accent) ? body.accent : "orange",
+    active: body.active ?? true,
+    sortOrder: Number(body.sortOrder || 0)
+  };
+}
+
+function extraPayload(body) {
+  const name = String(body.name || "").trim();
+  const price = Number(body.price);
+
+  if (!name) throw httpError(400, "Extra name is required");
+  if (!Number.isFinite(price) || price < 0) throw httpError(400, "Valid extra price is required");
+
+  return {
+    name,
+    price,
     active: body.active ?? true,
     sortOrder: Number(body.sortOrder || 0)
   };
@@ -249,6 +277,62 @@ adminRouter.delete("/menu-items/:id", async (req, res, next) => {
     }
 
     res.json({ message: "Menu item deleted" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/extras", async (_req, res, next) => {
+  try {
+    const extras = await MenuExtra.find().sort({ sortOrder: 1, name: 1 });
+    res.json({ extras: extras.map(serializeExtra) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/extras", async (req, res, next) => {
+  try {
+    const extra = await MenuExtra.create(extraPayload(req.body));
+    res.status(201).json({ extra: serializeExtra(extra), message: "Extra created" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Extra already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.patch("/extras/:id", async (req, res, next) => {
+  try {
+    const extra = await MenuExtra.findByIdAndUpdate(
+      req.params.id,
+      { $set: extraPayload(req.body) },
+      { new: true, runValidators: true }
+    );
+
+    if (!extra) {
+      throw httpError(404, "Extra not found");
+    }
+
+    res.json({ extra: serializeExtra(extra), message: "Extra updated" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Extra already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.delete("/extras/:id", async (req, res, next) => {
+  try {
+    const extra = await MenuExtra.findByIdAndDelete(req.params.id);
+
+    if (!extra) {
+      throw httpError(404, "Extra not found");
+    }
+
+    res.json({ message: "Extra deleted" });
   } catch (error) {
     next(error);
   }

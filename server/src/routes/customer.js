@@ -1,6 +1,7 @@
 import express from "express";
 import { env } from "../config/env.js";
 import { restaurantName } from "../data/menu.js";
+import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Order } from "../models/Order.js";
 import { Promotion } from "../models/Promotion.js";
@@ -96,6 +97,16 @@ function serializePromotion(promotion, currentMinutes = thailandMinutesNow()) {
   };
 }
 
+function serializeExtra(extra) {
+  return {
+    id: extra._id.toString(),
+    name: extra.name,
+    price: extra.price,
+    active: extra.active,
+    sortOrder: extra.sortOrder
+  };
+}
+
 function inferPromotionKind(promotion) {
   const title = String(promotion.title || "").toLowerCase();
   if (title.includes("thai")) return "free_thai_food";
@@ -170,7 +181,29 @@ function validateQuantity(quantity) {
   }
 }
 
-function buildRegularOrderItem(cartItem, menuBySlug) {
+function normalizeExtras(cartItem, extrasById) {
+  const requestedExtras = Array.isArray(cartItem.extras) ? cartItem.extras : [];
+  const selectedIds = [
+    ...new Set(
+      requestedExtras
+        .map((extra) => String(extra?.id || extra?.extraId || extra || "").trim())
+        .filter(Boolean)
+    )
+  ];
+
+  return selectedIds.map((id) => {
+    const extra = extrasById.get(id);
+    if (!extra) throw httpError(400, "Invalid item extra");
+
+    return {
+      extraId: extra._id.toString(),
+      name: extra.name,
+      price: extra.price
+    };
+  });
+}
+
+function buildRegularOrderItem(cartItem, menuBySlug, extrasById) {
   const requestedId = String(cartItem.menuItemId || "").trim();
   const menuItem = menuBySlug.get(requestedId);
   const quantity = Number(cartItem.quantity || 0);
@@ -182,8 +215,11 @@ function buildRegularOrderItem(cartItem, menuBySlug) {
   validateQuantity(quantity);
 
   const selectedOptions = normalizeItemSelections(cartItem, menuItem);
+  const selectedExtras = normalizeExtras(cartItem, extrasById);
+  const extrasTotal = selectedExtras.reduce((sum, extra) => sum + extra.price, 0);
   const option = selectedOptions.map((selected) => selected.value).join(" / ");
-  const gross = menuItem.price * quantity;
+  const unitGross = menuItem.price + extrasTotal;
+  const gross = unitGross * quantity;
   const discountAmount = money(gross * ((menuItem.discountPercent || 0) / 100));
   const lineTotal = money(gross - discountAmount);
 
@@ -192,6 +228,7 @@ function buildRegularOrderItem(cartItem, menuBySlug) {
     name: menuItem.name,
     option,
     options: selectedOptions,
+    extras: selectedExtras,
     quantity,
     unitPrice: menuItem.price,
     discountAmount,
@@ -297,12 +334,23 @@ async function buildOrderItems(cartItems) {
     )
   ];
   const promotionIds = [...new Set(cartItems.map((cartItem) => String(cartItem.promoId || "").trim()).filter(Boolean))];
-  const [menuItems, promotions] = await Promise.all([
+  const extraIds = [
+    ...new Set(
+      cartItems.flatMap((cartItem) =>
+        (Array.isArray(cartItem.extras) ? cartItem.extras : [])
+          .map((extra) => String(extra?.id || extra?.extraId || extra || "").trim())
+          .filter(Boolean)
+      )
+    )
+  ];
+  const [menuItems, promotions, extras] = await Promise.all([
     MenuItem.find({ slug: { $in: requestedIds }, active: true }),
-    Promotion.find({ _id: { $in: promotionIds }, active: true })
+    Promotion.find({ _id: { $in: promotionIds }, active: true }),
+    MenuExtra.find({ _id: { $in: extraIds }, active: true })
   ]);
   const menuBySlug = new Map(menuItems.map((item) => [item.slug, item]));
   const promotionById = new Map(promotions.map((promotion) => [promotion._id.toString(), promotion]));
+  const extrasById = new Map(extras.map((extra) => [extra._id.toString(), extra]));
 
   const items = cartItems.flatMap((cartItem) => {
     if (cartItem.promoId) {
@@ -311,10 +359,15 @@ async function buildOrderItems(cartItems) {
       return buildPromotionOrderItems(cartItem, promotion, menuBySlug);
     }
 
-    return buildRegularOrderItem(cartItem, menuBySlug);
+    return buildRegularOrderItem(cartItem, menuBySlug, extrasById);
   });
 
-  const subtotal = money(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0));
+  const subtotal = money(
+    items.reduce((sum, item) => {
+      const extrasTotal = (item.extras || []).reduce((extraSum, extra) => extraSum + extra.price, 0);
+      return sum + (item.unitPrice + extrasTotal) * item.quantity;
+    }, 0)
+  );
   const discountTotal = money(items.reduce((sum, item) => sum + item.discountAmount, 0));
   const total = money(items.reduce((sum, item) => sum + item.lineTotal, 0));
 
@@ -323,9 +376,10 @@ async function buildOrderItems(cartItems) {
 
 customerRouter.get("/menu", async (_req, res, next) => {
   try {
-    const [items, promotions] = await Promise.all([
+    const [items, promotions, extras] = await Promise.all([
       MenuItem.find({ active: true }).sort({ category: 1, sortOrder: 1, name: 1 }),
-      Promotion.find({ active: true }).sort({ sortOrder: 1, createdAt: 1 })
+      Promotion.find({ active: true }).sort({ sortOrder: 1, createdAt: 1 }),
+      MenuExtra.find({ active: true }).sort({ sortOrder: 1, name: 1 })
     ]);
     const currentThailandMinutes = thailandMinutesNow();
 
@@ -333,6 +387,7 @@ customerRouter.get("/menu", async (_req, res, next) => {
       restaurant: restaurantName,
       timeZone: APP_TIME_ZONE,
       promotions: promotions.map((promotion) => serializePromotion(promotion, currentThailandMinutes)),
+      extras: extras.map(serializeExtra),
       items: items.map(serializeMenuItem)
     });
   } catch (error) {

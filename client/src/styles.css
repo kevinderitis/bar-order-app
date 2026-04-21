@@ -662,6 +662,65 @@ button:disabled {
   font-weight: 850;
 }
 
+.item-extras {
+  display: grid;
+  gap: 8px;
+}
+
+.item-extras > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.item-extras > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.extra-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(34, 32, 29, 0.1);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 900;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.extra-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.extra-chip strong {
+  color: var(--green);
+  font-size: 0.72rem;
+}
+
+.extra-chip-active {
+  border-color: rgba(95, 168, 121, 0.35);
+  color: var(--charcoal);
+  background: rgba(229, 244, 231, 0.92);
+  box-shadow: 0 10px 22px rgba(95, 168, 121, 0.14);
+  transform: translateY(-1px);
+}
+
 .menu-empty {
   display: grid;
   place-items: center;
@@ -2459,23 +2518,43 @@ button:disabled {
   }
 
   .menu-page {
-    min-height: 100dvh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-top: max(18px, env(safe-area-inset-top));
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100dvh;
+    overflow: hidden;
+    padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+  }
+
+  .menu-header,
+  .promo-area,
+  .menu-tools {
+    flex: 0 0 auto;
+    width: 100%;
   }
 
   .menu-tools {
-    position: sticky;
-    top: 0;
+    position: relative;
+    top: auto;
     z-index: 12;
-    margin-bottom: 18px;
+    margin-bottom: 12px;
     padding: 10px 0 12px;
     background:
       linear-gradient(150deg, rgba(255, 232, 212, 0.96), rgba(255, 247, 239, 0.96) 52%, rgba(229, 244, 231, 0.92)),
       var(--cream);
     box-shadow: 0 16px 32px rgba(55, 33, 18, 0.08);
     backdrop-filter: blur(18px);
+  }
+
+  .menu-list {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(126px, calc(env(safe-area-inset-bottom) + 126px));
   }
 
   .category-chips {

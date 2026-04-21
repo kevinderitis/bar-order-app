@@ -80,17 +80,29 @@ function inferPromotionKind(promo) {
 }
 
 function cartLineGross(item) {
-  return item.subtotal ?? item.price * item.quantity;
+  const extrasTotal = (item.extras || []).reduce((sum, extra) => sum + Number(extra.price || 0), 0);
+  return item.subtotal ?? (item.price + extrasTotal) * item.quantity;
 }
 
 function cartLineDiscount(item) {
   if (typeof item.discountAmount === "number") return item.discountAmount;
-  return item.price * item.quantity * ((item.discountPercent || 0) / 100);
+  return cartLineGross(item) * ((item.discountPercent || 0) / 100);
 }
 
 function cartLineTotal(item) {
   if (typeof item.lineTotal === "number") return item.lineTotal;
   return cartLineGross(item) - cartLineDiscount(item);
+}
+
+function itemDetailText(item) {
+  const optionText = item.option || "";
+  const extrasText = item.extras?.length ? `Extras: ${item.extras.map((extra) => extra.name).join(", ")}` : "";
+
+  return [optionText, extrasText].filter(Boolean).join(" · ");
+}
+
+function isFoodItem(item) {
+  return !["Bottles", "Soft Drinks", "Cocktails", "Buckets", "Shots", "Long Drinks"].includes(item.category);
 }
 
 function canNotify() {
@@ -546,6 +558,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   const [promoMessage, setPromoMessage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState({});
   const [selectedOptionGroups, setSelectedOptionGroups] = useState({});
+  const [selectedExtras, setSelectedExtras] = useState({});
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => {
     return sum + cartLineTotal(item);
@@ -586,17 +599,24 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   function itemSelectionFor(item) {
     return {
       option: optionFor(item),
-      options: optionGroupsFor(item)
+      options: optionGroupsFor(item),
+      extras: extrasFor(item)
     };
+  }
+
+  function extrasFor(item) {
+    const selectedIds = selectedExtras[item.id] || [];
+    return (menu.extras || []).filter((extra) => selectedIds.includes(extra.id));
   }
 
   function selectionKey(item) {
     const selection = itemSelectionFor(item);
+    const extrasKey = selection.extras.map((extra) => extra.id).sort().join(",");
     if (selection.options.length > 0) {
-      return selection.options.map((option) => `${option.name}:${option.value}`).join("|");
+      return `${selection.options.map((option) => `${option.name}:${option.value}`).join("|")}:extras:${extrasKey}`;
     }
 
-    return selection.option;
+    return `${selection.option}:extras:${extrasKey}`;
   }
 
   function quantityFor(item) {
@@ -609,7 +629,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     const card = track?.children[index];
     if (!track || !card) return;
 
-    card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    track.scrollTo({ left: card.offsetLeft - track.offsetLeft, behavior: "smooth" });
     setActivePromoIndex(index);
   }
 
@@ -621,7 +641,9 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
         const next = (current + 1) % menu.promotions.length;
         const track = promoTrackRef.current;
         const card = track?.children[next];
-        if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+        if (track && card) {
+          track.scrollTo({ left: card.offsetLeft - track.offsetLeft, behavior: "smooth" });
+        }
         return next;
       });
     }, 5500);
@@ -733,6 +755,8 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                 .map((item) => {
                   const option = optionFor(item);
                   const optionGroups = optionGroupsFor(item);
+                  const itemExtras = extrasFor(item);
+                  const hasExtras = isFoodItem(item) && Boolean(menu.extras?.length);
                   const quantity = quantityFor(item);
 
                   return (
@@ -792,6 +816,37 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                             ))}
                           </div>
                         ) : null}
+                        {hasExtras ? (
+                          <div className="item-extras" aria-label={`Extras for ${item.name}`}>
+                            <span>Extras</span>
+                            <div>
+                              {menu.extras.map((extra) => {
+                                const checked = itemExtras.some((selected) => selected.id === extra.id);
+
+                                return (
+                                  <label className={checked ? "extra-chip extra-chip-active" : "extra-chip"} key={extra.id}>
+                                    <input
+                                      checked={checked}
+                                      type="checkbox"
+                                      onChange={(event) =>
+                                        setSelectedExtras((current) => {
+                                          const currentIds = current[item.id] || [];
+                                          const nextIds = event.target.checked
+                                            ? [...currentIds, extra.id]
+                                            : currentIds.filter((id) => id !== extra.id);
+
+                                          return { ...current, [item.id]: nextIds };
+                                        })
+                                      }
+                                    />
+                                    <span>{extra.name}</span>
+                                    <strong>+{money(extra.price)}</strong>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="menu-item-meta">
                           <strong>{money(item.price)}</strong>
                           {item.discountPercent ? <span>{item.discountPercent}% off</span> : null}
@@ -800,7 +855,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                       <div className="quantity-control">
                         <button
                           type="button"
-                          onClick={() => onRemove(item.id, option, optionGroups)}
+                          onClick={() => onRemove(item.id, option, optionGroups, itemExtras)}
                           disabled={!quantity}
                           aria-label={`Remove ${item.name}`}
                         >
@@ -809,7 +864,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                         <span>{quantity}</span>
                         <button
                           type="button"
-                          onClick={() => onAdd(item.id, option, optionGroups)}
+                          onClick={() => onAdd(item.id, option, optionGroups, itemExtras)}
                           aria-label={`Add ${item.name}`}
                         >
                           <Plus size={16} />
@@ -868,7 +923,7 @@ function ConfirmView({ cart, notes, onNotesChange, onBack, onAddItem, onRemoveIt
           <div className="confirm-row" key={item.cartKey}>
             <div>
               <strong>{item.name}</strong>
-              <span>{item.option ? `${item.option} · ` : ""}Qty {item.quantity}</span>
+              <span>{itemDetailText(item) ? `${itemDetailText(item)} · ` : ""}Qty {item.quantity}</span>
             </div>
             <span>{money(cartLineTotal(item))}</span>
             <div className="confirm-item-actions">
@@ -949,8 +1004,8 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
 
           <div className="order-receipt">
             {(order.items || []).map((item) => (
-              <div className="receipt-row" key={`${item.menuItemId}-${item.option || ""}`}>
-                <span>{item.quantity}x {item.name}{item.option ? ` · ${item.option}` : ""}</span>
+              <div className="receipt-row" key={`${item.menuItemId}-${item.option || ""}-${item.extras?.map((extra) => extra.extraId).join("-") || ""}`}>
+                <span>{item.quantity}x {item.name}{itemDetailText(item) ? ` · ${itemDetailText(item)}` : ""}</span>
                 <strong>{money(item.lineTotal)}</strong>
               </div>
             ))}
@@ -998,7 +1053,7 @@ export default function CustomerApp() {
   const lastPingRef = useRef(localStorage.getItem("ready-order-last-ping") || "");
   const previousStatusRef = useRef("");
   const [customerName, setCustomerName] = useState(() => localStorage.getItem(NAME_KEY) || "");
-  const [menu, setMenu] = useState({ promotions: [], items: [] });
+  const [menu, setMenu] = useState({ promotions: [], items: [], extras: [] });
   const [cart, setCart] = useState([]);
   const [notes, setNotes] = useState("");
   const [order, setOrder] = useState(null);
@@ -1177,14 +1232,16 @@ export default function CustomerApp() {
     );
   }
 
-  function addItem(itemId, option = "", options = []) {
+  function addItem(itemId, option = "", options = [], extras = []) {
     const item = menu.items.find((menuItem) => menuItem.id === itemId);
     if (!item) return;
     const cleanOption = option || item.options?.[0] || "";
     const selectedOptions = options.filter((selected) => selected.name && selected.value);
+    const selectedExtras = extras.filter((extra) => extra.id && extra.name);
     const selectionKey =
       selectedOptions.length > 0 ? selectedOptions.map((selected) => `${selected.name}:${selected.value}`).join("|") : cleanOption;
-    const cartKey = `${itemId}:${selectionKey}`;
+    const extrasKey = selectedExtras.map((extra) => extra.id).sort().join(",");
+    const cartKey = `${itemId}:${selectionKey}:extras:${extrasKey}`;
     setCart((current) => {
       const existing = current.find((cartItem) => cartItem.cartKey === cartKey);
       if (existing) {
@@ -1198,6 +1255,7 @@ export default function CustomerApp() {
           ...item,
           option: selectedOptions.length ? selectedOptions.map((selected) => selected.value).join(" / ") : cleanOption,
           options: selectedOptions,
+          extras: selectedExtras,
           cartKey,
           quantity: 1
         }
@@ -1205,11 +1263,13 @@ export default function CustomerApp() {
     });
   }
 
-  function removeItem(itemId, option = "", options = []) {
+  function removeItem(itemId, option = "", options = [], extras = []) {
     const selectedOptions = options.filter((selected) => selected.name && selected.value);
+    const selectedExtras = extras.filter((extra) => extra.id && extra.name);
     const selectionKey =
       selectedOptions.length > 0 ? selectedOptions.map((selected) => `${selected.name}:${selected.value}`).join("|") : option;
-    const cartKey = `${itemId}:${selectionKey}`;
+    const extrasKey = selectedExtras.map((extra) => extra.id).sort().join(",");
+    const cartKey = `${itemId}:${selectionKey}:extras:${extrasKey}`;
     setCart((current) =>
       current
         .map((item) => (item.cartKey === cartKey ? { ...item, quantity: item.quantity - 1 } : item))
@@ -1293,6 +1353,7 @@ export default function CustomerApp() {
           menuItemId: item.id,
           option: item.options?.length ? "" : item.option,
           options: item.options || [],
+          extras: item.extras || [],
           quantity: item.quantity
         }))
       });
