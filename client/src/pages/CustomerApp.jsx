@@ -551,9 +551,11 @@ function NameGate({ initialName, onContinue }) {
 
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
+  const lastMenuScrollTopRef = useRef(0);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
+  const [promosCollapsed, setPromosCollapsed] = useState(false);
   const [activePromo, setActivePromo] = useState(null);
   const [promoMessage, setPromoMessage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState({});
@@ -661,6 +663,19 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     setActivePromoIndex(Math.max(0, Math.min(menu.promotions.length - 1, index)));
   }
 
+  function handleMenuScroll(event) {
+    const nextTop = event.currentTarget.scrollTop;
+    const previousTop = lastMenuScrollTopRef.current;
+
+    if (nextTop <= 8) {
+      setPromosCollapsed(false);
+    } else if (nextTop > previousTop + 8) {
+      setPromosCollapsed(true);
+    }
+
+    lastMenuScrollTopRef.current = nextTop;
+  }
+
   function handlePromotionClick(promo) {
     if (!promo.isAvailableNow) {
       setPromoMessage(`${promo.title} is available ${promotionScheduleLabel(promo)}.`);
@@ -685,7 +700,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
         </button>
       </header>
 
-      <section className="promo-area" aria-label="Promotions">
+      <section className={promosCollapsed ? "promo-area promo-area-collapsed" : "promo-area"} aria-label="Promotions">
         <div className="promo-carousel" ref={promoTrackRef} onScroll={handlePromoScroll}>
           {menu.promotions.map((promo) => (
             <button
@@ -745,7 +760,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
         </div>
       </section>
 
-      <section className="menu-list" aria-label="Menu">
+      <section className="menu-list" aria-label="Menu" onScroll={handleMenuScroll}>
         {visibleCategories.map((category) => (
           <div className="menu-category" key={category}>
             <h2>{category}</h2>
