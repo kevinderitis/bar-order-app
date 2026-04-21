@@ -2668,6 +2668,12 @@ button:disabled {
     padding-bottom: max(126px, calc(env(safe-area-inset-bottom) + 126px));
   }
 
+  .menu-list-locked {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
   .category-chips {
     padding-bottom: 0;
   }

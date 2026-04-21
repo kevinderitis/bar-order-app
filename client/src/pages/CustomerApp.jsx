@@ -565,6 +565,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   const [activePromoIndex, setActivePromoIndex] = useState(0);
   const [promoCollapseProgress, setPromoCollapseProgress] = useState(0);
   const [promoOpening, setPromoOpening] = useState(false);
+  const [menuScrollLocked, setMenuScrollLocked] = useState(false);
   const [activePromo, setActivePromo] = useState(null);
   const [promoMessage, setPromoMessage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState({});
@@ -675,14 +676,24 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   useEffect(() => {
     if (promoCollapseProgress < 1) return undefined;
 
-    const frame = window.requestAnimationFrame(() => {
+    const firstFrame = window.requestAnimationFrame(() => {
       if (menuListRef.current) {
         menuListRef.current.scrollTop = 0;
         lastMenuScrollTopRef.current = 0;
       }
     });
+    const unlockTimer = window.setTimeout(() => {
+      if (menuListRef.current) {
+        menuListRef.current.scrollTop = 0;
+        lastMenuScrollTopRef.current = 0;
+      }
+      setMenuScrollLocked(false);
+    }, 280);
 
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.clearTimeout(unlockTimer);
+    };
   }, [promoCollapseProgress]);
 
   function handlePromoScroll() {
@@ -698,6 +709,12 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   function handleMenuScroll(event) {
     const nextTop = event.currentTarget.scrollTop;
     const reachedTopFromListScroll = nextTop <= 0 && lastMenuScrollTopRef.current > 0;
+
+    if (menuScrollLocked) {
+      event.currentTarget.scrollTop = 0;
+      lastMenuScrollTopRef.current = 0;
+      return;
+    }
 
     if (reachedTopFromListScroll && promoCollapseProgressRef.current >= 1) {
       updatePromoCollapseProgress(0);
@@ -734,6 +751,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
 
     if (shouldHidePromo) {
       element.scrollTop = 0;
+      setMenuScrollLocked(true);
       updatePromoCollapseProgress(1);
       return true;
     }
@@ -888,7 +906,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
 
       <section
         ref={menuListRef}
-        className="menu-list"
+        className={menuScrollLocked ? "menu-list menu-list-locked" : "menu-list"}
         aria-label="Menu"
         onScroll={handleMenuScroll}
         onTouchMove={handleMenuTouchMove}
