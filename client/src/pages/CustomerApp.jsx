@@ -696,9 +696,17 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   function consumePromoScroll(element, delta) {
     const currentProgress = promoCollapseProgressRef.current;
     const shouldHidePromo = delta > 0 && currentProgress < 1;
-    const shouldShowPromo = delta < 0 && element.scrollTop <= 0 && currentProgress > 0;
+    const reachesTopWhileShowingPromo = delta < 0 && currentProgress > 0 && element.scrollTop + delta <= 0;
+    const shouldShowPromo = delta < 0 && currentProgress > 0 && element.scrollTop <= 0;
 
-    if (!shouldHidePromo && !shouldShowPromo) return false;
+    if (!shouldHidePromo && !shouldShowPromo && !reachesTopWhileShowingPromo) return false;
+
+    if (reachesTopWhileShowingPromo) {
+      const overflowDelta = element.scrollTop + delta;
+      element.scrollTop = 0;
+      updatePromoCollapseProgress(currentProgress + overflowDelta / PROMO_COLLAPSE_DISTANCE);
+      return true;
+    }
 
     updatePromoCollapseProgress(currentProgress + delta / PROMO_COLLAPSE_DISTANCE);
     return true;

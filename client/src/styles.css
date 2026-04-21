@@ -256,6 +256,7 @@ button:disabled {
   gap: 14px;
   overflow-x: auto;
   padding: 2px;
+  border-radius: 28px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
 }
@@ -277,6 +278,7 @@ button:disabled {
   border: 0;
   border-radius: 28px;
   color: #fffaf3;
+  background: transparent;
   text-align: left;
   scroll-snap-align: start;
   box-shadow: 0 22px 56px rgba(55, 33, 18, 0.18);
@@ -300,6 +302,7 @@ button:disabled {
   inset: 0;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   object-fit: cover;
   transform: scale(1.02);
 }
