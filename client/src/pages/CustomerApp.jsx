@@ -31,7 +31,8 @@ import { getDeviceId } from "../lib/device.js";
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
 const PROMO_COLLAPSE_DISTANCE = 250;
-const PROMO_SCROLL_DAMPING = 0.42;
+const PROMO_HIDE_SCROLL_DAMPING = 0.72;
+const PROMO_SHOW_SCROLL_DAMPING = 0.42;
 const PROMO_EXPANDED_HEIGHT = 218;
 const PROMO_EXPANDED_MARGIN = 26;
 const PROMO_COLLAPSED_MARGIN = 6;
@@ -693,7 +694,8 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   }
 
   function dampenMenuScroll(element, delta) {
-    element.scrollTop += delta * PROMO_SCROLL_DAMPING;
+    const damping = delta > 0 ? PROMO_HIDE_SCROLL_DAMPING : PROMO_SHOW_SCROLL_DAMPING;
+    element.scrollTop += delta * damping;
   }
 
   function handleMenuWheel(event) {
@@ -755,10 +757,8 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
             Math.round((PROMO_EXPANDED_MARGIN - PROMO_COLLAPSED_MARGIN) * (1 - promoCollapseProgress))
           }px`,
           "--promo-area-y": `${Math.round(-18 * promoCollapseProgress)}px`,
-          "--promo-content-y": `${Math.round(-66 * promoCollapseProgress)}px`,
-          "--promo-content-scale": 1 - 0.035 * promoCollapseProgress,
-          "--promo-opacity": 1 - promoCollapseProgress,
-          "--promo-blur": `${Math.round(3 * promoCollapseProgress)}px`
+          "--promo-content-y": `${Math.round(-38 * promoCollapseProgress)}px`,
+          "--promo-content-scale": 1 - 0.018 * promoCollapseProgress
         }}
         aria-label="Promotions"
       >

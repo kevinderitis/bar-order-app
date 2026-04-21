@@ -240,11 +240,9 @@ button:disabled {
   gap: 10px;
   min-height: 0;
   overflow: hidden;
-  opacity: var(--promo-opacity, 1);
-  filter: blur(var(--promo-blur, 0));
   transform: translateY(var(--promo-content-y, 0)) scale(var(--promo-content-scale, 1));
   transform-origin: top center;
-  will-change: opacity, transform, filter;
+  will-change: transform;
 }
 
 .promo-area-collapsed {
