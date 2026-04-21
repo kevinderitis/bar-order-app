@@ -3,6 +3,7 @@ import {
   BellRing,
   Beer,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   Clock3,
   CookingPot,
@@ -623,7 +624,17 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
 
   function quantityFor(item) {
     const key = `${item.id}:${selectionKey(item)}`;
-    return cart.find((cartItem) => cartItem.cartKey === key)?.quantity || 0;
+    const selectedQuantity = cart.find((cartItem) => cartItem.cartKey === key)?.quantity || 0;
+    if (selectedQuantity) return selectedQuantity;
+
+    return cart.filter((cartItem) => cartItem.id === item.id).reduce((sum, cartItem) => sum + cartItem.quantity, 0);
+  }
+
+  function fallbackCartKeyFor(item) {
+    const key = `${item.id}:${selectionKey(item)}`;
+    if (cart.some((cartItem) => cartItem.cartKey === key)) return "";
+
+    return [...cart].reverse().find((cartItem) => cartItem.id === item.id)?.cartKey || "";
   }
 
   function scrollToPromo(index) {
@@ -667,9 +678,9 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     const nextTop = event.currentTarget.scrollTop;
     const previousTop = lastMenuScrollTopRef.current;
 
-    if (nextTop <= 8) {
+    if (nextTop <= 2) {
       setPromosCollapsed(false);
-    } else if (nextTop > previousTop + 8) {
+    } else if (nextTop > previousTop) {
       setPromosCollapsed(true);
     }
 
@@ -701,39 +712,41 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
       </header>
 
       <section className={promosCollapsed ? "promo-area promo-area-collapsed" : "promo-area"} aria-label="Promotions">
-        <div className="promo-carousel" ref={promoTrackRef} onScroll={handlePromoScroll}>
-          {menu.promotions.map((promo) => (
-            <button
-              className={
-                promo.isAvailableNow
-                  ? `promo-card promo-${promo.accent}`
-                  : `promo-card promo-${promo.accent} promo-card-locked`
-              }
-              type="button"
-              key={promo.id}
-              onClick={() => handlePromotionClick(promo)}
-            >
-              {promo.imageDataUrl ? <img src={promo.imageDataUrl} alt="" aria-hidden="true" /> : null}
-              <span>{promo.isAvailableNow ? promotionScheduleLabel(promo) : `Soon · ${promotionScheduleLabel(promo)}`}</span>
-              <strong>{promo.title}</strong>
-              <small>{promo.description}</small>
-            </button>
-          ))}
-        </div>
-        {menu.promotions.length > 1 ? (
-          <div className="promo-dots" aria-label="Promotion slides">
-            {menu.promotions.map((promo, index) => (
+        <div className="promo-area-content">
+          <div className="promo-carousel" ref={promoTrackRef} onScroll={handlePromoScroll}>
+            {menu.promotions.map((promo) => (
               <button
-                className={activePromoIndex === index ? "promo-dot promo-dot-active" : "promo-dot"}
+                className={
+                  promo.isAvailableNow
+                    ? `promo-card promo-${promo.accent}`
+                    : `promo-card promo-${promo.accent} promo-card-locked`
+                }
                 type="button"
                 key={promo.id}
-                onClick={() => scrollToPromo(index)}
-                aria-label={`Show promotion ${index + 1}`}
-              />
+                onClick={() => handlePromotionClick(promo)}
+              >
+                {promo.imageDataUrl ? <img src={promo.imageDataUrl} alt="" aria-hidden="true" /> : null}
+                <span>{promo.isAvailableNow ? promotionScheduleLabel(promo) : `Soon · ${promotionScheduleLabel(promo)}`}</span>
+                <strong>{promo.title}</strong>
+                <small>{promo.description}</small>
+              </button>
             ))}
           </div>
-        ) : null}
-        {promoMessage ? <div className="promo-message" role="status">{promoMessage}</div> : null}
+          {menu.promotions.length > 1 ? (
+            <div className="promo-dots" aria-label="Promotion slides">
+              {menu.promotions.map((promo, index) => (
+                <button
+                  className={activePromoIndex === index ? "promo-dot promo-dot-active" : "promo-dot"}
+                  type="button"
+                  key={promo.id}
+                  onClick={() => scrollToPromo(index)}
+                  aria-label={`Show promotion ${index + 1}`}
+                />
+              ))}
+            </div>
+          ) : null}
+          {promoMessage ? <div className="promo-message" role="status">{promoMessage}</div> : null}
+        </div>
       </section>
 
       <section className="menu-tools" aria-label="Menu filters">
@@ -832,9 +845,12 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                           </div>
                         ) : null}
                         {hasExtras ? (
-                          <div className="item-extras" aria-label={`Extras for ${item.name}`}>
-                            <span>Extras</span>
-                            <div>
+                          <details className="item-extras">
+                            <summary>
+                              <span>{itemExtras.length ? `${itemExtras.length} extras selected` : "Add extras"}</span>
+                              <ChevronDown size={15} />
+                            </summary>
+                            <div aria-label={`Extras for ${item.name}`}>
                               {menu.extras.map((extra) => {
                                 const checked = itemExtras.some((selected) => selected.id === extra.id);
 
@@ -860,7 +876,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                                 );
                               })}
                             </div>
-                          </div>
+                          </details>
                         ) : null}
                         <div className="menu-item-meta">
                           <strong>{money(item.price)}</strong>
@@ -870,7 +886,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
                       <div className="quantity-control">
                         <button
                           type="button"
-                          onClick={() => onRemove(item.id, option, optionGroups, itemExtras)}
+                          onClick={() => onRemove(item.id, option, optionGroups, itemExtras, fallbackCartKeyFor(item))}
                           disabled={!quantity}
                           aria-label={`Remove ${item.name}`}
                         >
@@ -1278,16 +1294,17 @@ export default function CustomerApp() {
     });
   }
 
-  function removeItem(itemId, option = "", options = [], extras = []) {
+  function removeItem(itemId, option = "", options = [], extras = [], fallbackCartKey = "") {
     const selectedOptions = options.filter((selected) => selected.name && selected.value);
     const selectedExtras = extras.filter((extra) => extra.id && extra.name);
     const selectionKey =
       selectedOptions.length > 0 ? selectedOptions.map((selected) => `${selected.name}:${selected.value}`).join("|") : option;
     const extrasKey = selectedExtras.map((extra) => extra.id).sort().join(",");
     const cartKey = `${itemId}:${selectionKey}:extras:${extrasKey}`;
+    const targetCartKey = fallbackCartKey || cartKey;
     setCart((current) =>
       current
-        .map((item) => (item.cartKey === cartKey ? { ...item, quantity: item.quantity - 1 } : item))
+        .map((item) => (item.cartKey === targetCartKey ? { ...item, quantity: item.quantity - 1 } : item))
         .filter((item) => item.quantity > 0)
     );
   }
