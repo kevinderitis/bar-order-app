@@ -30,6 +30,10 @@ import { getDeviceId } from "../lib/device.js";
 
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
+const PROMO_COLLAPSE_DISTANCE = 170;
+const PROMO_EXPANDED_HEIGHT = 218;
+const PROMO_EXPANDED_MARGIN = 26;
+const PROMO_COLLAPSED_MARGIN = 6;
 
 function isRunningInstalled() {
   return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
@@ -552,12 +556,10 @@ function NameGate({ initialName, onContinue }) {
 
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
-  const lastMenuScrollTopRef = useRef(0);
-  const upwardMenuScrollRef = useRef(0);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePromoIndex, setActivePromoIndex] = useState(0);
-  const [promosCollapsed, setPromosCollapsed] = useState(false);
+  const [promoCollapseProgress, setPromoCollapseProgress] = useState(0);
   const [activePromo, setActivePromo] = useState(null);
   const [promoMessage, setPromoMessage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState({});
@@ -677,22 +679,9 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
 
   function handleMenuScroll(event) {
     const nextTop = event.currentTarget.scrollTop;
-    const previousTop = lastMenuScrollTopRef.current;
-    const delta = nextTop - previousTop;
+    const nextProgress = Math.min(1, Math.max(0, nextTop / PROMO_COLLAPSE_DISTANCE));
 
-    if (delta > 1) {
-      upwardMenuScrollRef.current = 0;
-      setPromosCollapsed(true);
-    } else if (delta < -1) {
-      upwardMenuScrollRef.current += Math.abs(delta);
-    }
-
-    if (nextTop <= 6 && upwardMenuScrollRef.current >= 44) {
-      setPromosCollapsed(false);
-      upwardMenuScrollRef.current = 0;
-    }
-
-    lastMenuScrollTopRef.current = nextTop;
+    setPromoCollapseProgress(Number(nextProgress.toFixed(3)));
   }
 
   function handlePromotionClick(promo) {
@@ -719,7 +708,23 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
         </button>
       </header>
 
-      <section className={promosCollapsed ? "promo-area promo-area-collapsed" : "promo-area"} aria-label="Promotions">
+      <section
+        className={promoCollapseProgress >= 0.995 ? "promo-area promo-area-collapsed" : "promo-area"}
+        style={{
+          "--promo-progress": promoCollapseProgress,
+          "--promo-height": `${Math.round(PROMO_EXPANDED_HEIGHT * (1 - promoCollapseProgress))}px`,
+          "--promo-margin": `${
+            PROMO_COLLAPSED_MARGIN +
+            Math.round((PROMO_EXPANDED_MARGIN - PROMO_COLLAPSED_MARGIN) * (1 - promoCollapseProgress))
+          }px`,
+          "--promo-area-y": `${Math.round(-18 * promoCollapseProgress)}px`,
+          "--promo-content-y": `${Math.round(-66 * promoCollapseProgress)}px`,
+          "--promo-content-scale": 1 - 0.035 * promoCollapseProgress,
+          "--promo-opacity": 1 - promoCollapseProgress,
+          "--promo-blur": `${Math.round(3 * promoCollapseProgress)}px`
+        }}
+        aria-label="Promotions"
+      >
         <div className="promo-area-content">
           <div className="promo-carousel" ref={promoTrackRef} onScroll={handlePromoScroll}>
             {menu.promotions.map((promo) => (

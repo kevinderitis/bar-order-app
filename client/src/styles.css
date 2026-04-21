@@ -225,18 +225,14 @@ button:disabled {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(0, var(--promo-height, 218px));
   gap: 10px;
   max-width: 940px;
   overflow: hidden;
-  margin: 0 auto 26px;
+  margin: 0 auto var(--promo-margin, 26px);
   transform-origin: top center;
+  transform: translateY(var(--promo-area-y, 0));
   will-change: grid-template-rows, margin, opacity, transform;
-  transition:
-    grid-template-rows 420ms cubic-bezier(0.16, 1, 0.3, 1),
-    margin 420ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 300ms ease,
-    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .promo-area-content {
@@ -244,25 +240,15 @@ button:disabled {
   gap: 10px;
   min-height: 0;
   overflow: hidden;
+  opacity: var(--promo-opacity, 1);
+  filter: blur(var(--promo-blur, 0));
+  transform: translateY(var(--promo-content-y, 0)) scale(var(--promo-content-scale, 1));
+  transform-origin: top center;
   will-change: opacity, transform, filter;
-  transition:
-    opacity 300ms ease,
-    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 360ms ease;
 }
 
 .promo-area-collapsed {
-  grid-template-rows: 0fr;
-  margin-bottom: 6px;
-  opacity: 0;
   pointer-events: none;
-  transform: translateY(-18px);
-}
-
-.promo-area-collapsed .promo-area-content {
-  opacity: 0;
-  filter: blur(3px);
-  transform: translateY(-42px) scale(0.97);
 }
 
 .promo-carousel {
