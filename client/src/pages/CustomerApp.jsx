@@ -557,6 +557,7 @@ function NameGate({ initialName, onContinue }) {
 function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
   const promoTrackRef = useRef(null);
   const menuTouchYRef = useRef(null);
+  const lastMenuScrollTopRef = useRef(0);
   const promoCollapseProgressRef = useRef(0);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -680,9 +681,22 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   }
 
   function handleMenuScroll(event) {
-    if (promoCollapseProgressRef.current < 1 && event.currentTarget.scrollTop > 0) {
-      event.currentTarget.scrollTop = 0;
+    const nextTop = event.currentTarget.scrollTop;
+    const reachedTopFromListScroll = nextTop <= 0 && lastMenuScrollTopRef.current > 0;
+
+    if (reachedTopFromListScroll && promoCollapseProgressRef.current >= 1) {
+      updatePromoCollapseProgress(0);
+      lastMenuScrollTopRef.current = 0;
+      return;
     }
+
+    if (promoCollapseProgressRef.current < 1 && nextTop > 0) {
+      event.currentTarget.scrollTop = 0;
+      lastMenuScrollTopRef.current = 0;
+      return;
+    }
+
+    lastMenuScrollTopRef.current = Math.max(0, nextTop);
   }
 
   function updatePromoCollapseProgress(nextProgress) {
@@ -700,6 +714,12 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
     const shouldShowPromo = delta < 0 && currentProgress > 0 && element.scrollTop <= 0;
 
     if (!shouldHidePromo && !shouldShowPromo && !reachesTopWhileShowingPromo) return false;
+
+    if (shouldHidePromo) {
+      element.scrollTop = 0;
+      updatePromoCollapseProgress(1);
+      return true;
+    }
 
     if (reachesTopWhileShowingPromo) {
       const overflowDelta = element.scrollTop + delta;
