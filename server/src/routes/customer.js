@@ -1,4 +1,6 @@
+import bcrypt from "bcryptjs";
 import express from "express";
+import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { restaurantName } from "../data/menu.js";
 import { MenuExtra } from "../models/MenuExtra.js";
@@ -6,6 +8,7 @@ import { MenuItem } from "../models/MenuItem.js";
 import { Order } from "../models/Order.js";
 import { Promotion } from "../models/Promotion.js";
 import { PushSubscription } from "../models/PushSubscription.js";
+import { User } from "../models/User.js";
 import { httpError } from "../utils/httpError.js";
 import { isPushConfigured } from "../utils/push.js";
 
@@ -14,10 +17,36 @@ const APP_TIME_ZONE = "Asia/Bangkok";
 
 const customerMessages = {
   pending: "Your order was received. We will start preparing it soon.",
+  confirmed: "Your order is confirmed and paid. We will start preparing it soon.",
   preparing: "Freshly in progress. We will send an alert as soon as it is time to pick up.",
   ready: "Please come to the pickup counter when you are ready.",
   delivered: "Thanks for ordering with us."
 };
+
+function orderCustomerMessage(order) {
+  if (!order) return "No order found";
+  return customerMessages[order.status] || "Order updated";
+}
+
+function signCustomerToken(user) {
+  return jwt.sign({ userId: user._id.toString(), role: "customer" }, env.jwtSecret, {
+    expiresIn: "30d"
+  });
+}
+
+async function getAuthenticatedUser(req) {
+  const authorization = req.headers.authorization || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  if (!token) return null;
+
+  try {
+    const payload = jwt.verify(token, env.jwtSecret);
+    if (!payload?.userId || payload?.role !== "customer") return null;
+    return await User.findById(payload.userId);
+  } catch {
+    return null;
+  }
+}
 
 function normalizeName(name) {
   return String(name || "").trim().replace(/\s+/g, " ");
@@ -122,19 +151,36 @@ function serializeOrder(order) {
     id: order._id.toString(),
     orderNumber: order._id.toString().slice(-6).toUpperCase(),
     customerName: order.customerName,
+    userId: order.userId,
+    guestOrder: order.guestOrder,
     status: order.status,
     items: order.items,
     subtotal: order.subtotal,
     discountTotal: order.discountTotal,
     total: order.total,
+    creditsCharged: order.creditsCharged || 0,
     notes: order.notes,
-    message: customerMessages[order.status] || "Order updated",
+    message: orderCustomerMessage(order),
     readyAt: order.readyAt,
     deliveredAt: order.deliveredAt,
     notificationPingAt: order.notificationPingAt,
     notificationMessage: order.notificationMessage,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
+  };
+}
+
+function serializeUser(user) {
+  if (!user) return null;
+
+  return {
+    id: user._id.toString(),
+    username: user.username,
+    displayName: user.displayName,
+    credits: user.credits,
+    active: user.active,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
   };
 }
 
@@ -414,9 +460,61 @@ customerRouter.get("/name-availability", async (req, res, next) => {
   }
 });
 
+customerRouter.post("/auth/login", async (req, res, next) => {
+  try {
+    const username = String(req.body.username || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+
+    if (!username || !password) {
+      throw httpError(400, "Username and password are required");
+    }
+
+    const user = await User.findOne({ username, active: true });
+    if (!user) {
+      throw httpError(401, "Invalid username or password");
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatches) {
+      throw httpError(401, "Invalid username or password");
+    }
+
+    res.json({
+      token: signCustomerToken(user),
+      user: serializeUser(user)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+customerRouter.get("/auth/me", async (req, res, next) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    res.json({ user: serializeUser(user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+customerRouter.get("/history", async (req, res, next) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      throw httpError(401, "Please sign in");
+    }
+
+    const orders = await Order.find({ userId: user._id.toString(), guestOrder: false }).sort({ createdAt: -1 }).limit(100);
+    res.json({ orders: orders.map(serializeOrder) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 customerRouter.post("/orders", async (req, res, next) => {
   try {
-    const customerName = normalizeName(req.body.customerName);
+    const user = await getAuthenticatedUser(req);
+    const customerName = user ? normalizeName(user.displayName) : normalizeName(req.body.customerName);
     const deviceId = String(req.body.deviceId || "").trim();
     const notes = String(req.body.notes || "").trim().slice(0, 280);
 
@@ -429,17 +527,35 @@ customerRouter.post("/orders", async (req, res, next) => {
     }
 
     const orderTotals = await buildOrderItems(req.body.items);
+    if (user) {
+      if (!user.active) {
+        throw httpError(403, "This account is inactive");
+      }
+      if (user.credits < orderTotals.total) {
+        throw httpError(400, "Not enough credits");
+      }
+      user.credits = money(user.credits - orderTotals.total);
+      await user.save();
+    }
+
     const order = await Order.create({
       customerName,
       customerNameKey: nameKey(customerName),
+      userId: user?._id?.toString() || null,
+      guestOrder: !user,
       linkedDeviceId: deviceId,
-      status: "pending",
+      status: user ? "confirmed" : "pending",
       activeName: true,
+      creditsCharged: user ? orderTotals.total : 0,
       notes,
       ...orderTotals
     });
 
-    res.status(201).json({ order: serializeOrder(order), message: customerMessages.pending });
+    res.status(201).json({
+      order: serializeOrder(order),
+      user: serializeUser(user),
+      message: orderCustomerMessage(order)
+    });
   } catch (error) {
     if (error?.code === 11000) {
       return next(httpError(409, "That name already has an active order"));
@@ -451,16 +567,20 @@ customerRouter.post("/orders", async (req, res, next) => {
 customerRouter.get("/order", async (req, res, next) => {
   try {
     const deviceId = String(req.query.deviceId || "").trim();
+    const user = await getAuthenticatedUser(req);
 
-    if (!deviceId) {
+    if (!deviceId && !user) {
       throw httpError(400, "Device session is required");
     }
 
-    const order = await Order.findOne({ linkedDeviceId: deviceId }).sort({ updatedAt: -1 });
+    const order = user
+      ? await Order.findOne({ userId: user._id.toString() }).sort({ updatedAt: -1 })
+      : await Order.findOne({ linkedDeviceId: deviceId }).sort({ updatedAt: -1 });
 
     res.json({
       order: serializeOrder(order),
-      message: order ? customerMessages[order.status] : "No order found"
+      user: serializeUser(user),
+      message: orderCustomerMessage(order)
     });
   } catch (error) {
     next(error);

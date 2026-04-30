@@ -150,6 +150,13 @@ button:disabled {
   animation: rise-in 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.guest-button {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+}
+
 .name-field {
   display: grid;
   gap: 8px;
@@ -219,6 +226,56 @@ button:disabled {
   background: rgba(255, 255, 255, 0.68);
   font-weight: 900;
   box-shadow: 0 12px 30px rgba(55, 33, 18, 0.08);
+}
+
+.menu-header-copy {
+  min-width: 0;
+}
+
+.menu-header-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-icon-chip {
+  width: 42px;
+  justify-content: center;
+  padding: 0;
+}
+
+.account-menu-shell {
+  position: relative;
+}
+
+.account-menu-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  display: grid;
+  min-width: 150px;
+  padding: 8px;
+  border: 1px solid rgba(34, 32, 29, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 20px 40px rgba(55, 33, 18, 0.12);
+  backdrop-filter: blur(18px);
+  z-index: 20;
+}
+
+.account-menu-popover button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--charcoal);
+  background: transparent;
+  font-weight: 800;
+  text-align: left;
+}
+
+.account-menu-popover button:hover {
+  background: rgba(255, 247, 239, 0.92);
 }
 
 .promo-area {
@@ -1866,6 +1923,166 @@ button:disabled {
   line-height: 1;
 }
 
+.admin-users-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.admin-users-toolbar h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.admin-search-field {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.admin-search-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--charcoal);
+  background: rgba(255, 255, 255, 0.86);
+  outline: none;
+}
+
+.admin-search-field input:focus {
+  border-color: rgba(240, 111, 60, 0.62);
+  box-shadow: 0 0 0 4px rgba(240, 111, 60, 0.12);
+}
+
+.admin-filter-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-filter-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.7);
+  font-weight: 850;
+}
+
+.admin-filter-button-active {
+  color: #fffaf3;
+  background: var(--charcoal);
+  box-shadow: 0 10px 24px rgba(34, 32, 29, 0.18);
+}
+
+.admin-reports-actions {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-report-card,
+.admin-report-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 18px 52px rgba(55, 33, 18, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.admin-report-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+}
+
+.admin-report-card span,
+.admin-report-panel-head small,
+.admin-report-user-row small,
+.admin-report-order-row small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.admin-report-card strong {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.admin-report-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.admin-report-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.admin-report-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-report-panel-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.admin-report-user-list,
+.admin-report-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-report-user-row,
+.admin-report-order-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 247, 239, 0.72);
+}
+
+.admin-report-order-row {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) auto;
+}
+
+.admin-report-user-row > div,
+.admin-report-order-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-report-user-row strong,
+.admin-report-order-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-orders-table {
   display: grid;
   overflow: hidden;
@@ -1879,7 +2096,7 @@ button:disabled {
 .admin-orders-head,
 .admin-order-summary {
   display: grid;
-  grid-template-columns: 1fr 1.25fr 0.8fr 0.75fr 40px;
+  grid-template-columns: 1fr 1.25fr 0.8fr 0.75fr 56px;
   gap: 12px;
   align-items: center;
 }
@@ -1891,6 +2108,11 @@ button:disabled {
   font-size: 0.76rem;
   font-weight: 950;
   text-transform: uppercase;
+}
+
+.admin-orders-head > span:last-child {
+  justify-self: end;
+  padding-right: 2px;
 }
 
 .admin-order-row {
@@ -1937,6 +2159,11 @@ button:disabled {
 
 .admin-status-ready,
 .admin-status-delivered {
+  color: #2e6f4d;
+  background: rgba(236, 249, 239, 0.9);
+}
+
+.admin-status-confirmed {
   color: #2e6f4d;
   background: rgba(236, 249, 239, 0.9);
 }
@@ -2205,6 +2432,12 @@ button:disabled {
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.admin-primary-compact {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 0.9rem;
 }
 
 .admin-order-card {
@@ -2710,9 +2943,35 @@ button:disabled {
     flex-direction: column;
   }
 
+  .admin-users-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .admin-section-toolbar .admin-primary,
+  .admin-reports-actions,
+  .admin-filter-group,
   .admin-pagination button {
     width: 100%;
+  }
+
+  .admin-report-summary,
+  .admin-report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-reports-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-order-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filter-button {
+    flex: 1 1 0;
+    justify-content: center;
   }
 
   .admin-pagination div {

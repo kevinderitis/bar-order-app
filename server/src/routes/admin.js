@@ -7,6 +7,7 @@ import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Order, ORDER_STATUSES } from "../models/Order.js";
 import { PROMOTION_ACCENTS, Promotion } from "../models/Promotion.js";
+import { User } from "../models/User.js";
 import { httpError } from "../utils/httpError.js";
 import { sendPushToDevice } from "../utils/push.js";
 
@@ -17,12 +18,15 @@ function serializeOrder(order) {
     id: order._id.toString(),
     orderNumber: order._id.toString().slice(-6).toUpperCase(),
     customerName: order.customerName,
+    userId: order.userId,
+    guestOrder: order.guestOrder,
     status: order.status,
     linkedDeviceId: order.linkedDeviceId,
     items: order.items,
     subtotal: order.subtotal,
     discountTotal: order.discountTotal,
     total: order.total,
+    creditsCharged: order.creditsCharged || 0,
     notes: order.notes,
     readyAt: order.readyAt,
     deliveredAt: order.deliveredAt,
@@ -30,6 +34,18 @@ function serializeOrder(order) {
     notificationMessage: order.notificationMessage,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
+  };
+}
+
+function serializeUser(user) {
+  return {
+    id: user._id.toString(),
+    username: user.username,
+    displayName: user.displayName,
+    credits: user.credits,
+    active: user.active,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
   };
 }
 
@@ -100,6 +116,21 @@ function serializeExtra(extra) {
     sortOrder: extra.sortOrder,
     createdAt: extra.createdAt,
     updatedAt: extra.updatedAt
+  };
+}
+
+function thailandDayRange(dateString) {
+  const value = String(dateString || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw httpError(400, "Date must use YYYY-MM-DD");
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const utcStart = Date.UTC(year, month - 1, day, -7, 0, 0, 0);
+
+  return {
+    start: new Date(utcStart),
+    end: new Date(utcStart + 24 * 60 * 60 * 1000)
   };
 }
 
@@ -177,6 +208,27 @@ function extraPayload(body) {
   };
 }
 
+async function userPayload(body, existingUser = null) {
+  const username = String(body.username || existingUser?.username || "").trim().toLowerCase();
+  const displayName = String(body.displayName || "").trim();
+  const credits = Number(body.credits ?? existingUser?.credits ?? 0);
+  const active = body.active ?? existingUser?.active ?? true;
+  const password = String(body.password || "");
+
+  if (!username) throw httpError(400, "Username is required");
+  if (!displayName) throw httpError(400, "Display name is required");
+  if (!Number.isFinite(credits) || credits < 0) throw httpError(400, "Valid credits amount is required");
+
+  const payload = { username, displayName, credits, active };
+  if (password) {
+    payload.passwordHash = await bcrypt.hash(password, 10);
+  } else if (!existingUser) {
+    throw httpError(400, "Password is required");
+  }
+
+  return payload;
+}
+
 function buildOrderPushPayload(order) {
   const isReady = order.status === "ready";
   const pingTime = order.notificationPingAt ? new Date(order.notificationPingAt).getTime() : Date.now();
@@ -223,6 +275,117 @@ adminRouter.get("/orders", async (_req, res, next) => {
     res.json({ orders: orders.map(serializeOrder) });
   } catch (error) {
     next(error);
+  }
+});
+
+adminRouter.get("/users", async (_req, res, next) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json({ users: users.map(serializeUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/reports/daily", async (req, res, next) => {
+  try {
+    const { date } = req.query;
+    const { start, end } = thailandDayRange(date);
+    const orders = await Order.find({
+      createdAt: {
+        $gte: start,
+        $lt: end
+      }
+    }).sort({ createdAt: -1 });
+
+    const userIds = [...new Set(orders.map((order) => order.userId).filter(Boolean))];
+    const users = userIds.length ? await User.find({ _id: { $in: userIds } }) : [];
+    const userMap = new Map(users.map((user) => [user._id.toString(), user]));
+
+    const rows = orders.map((order) => {
+      const user = order.userId ? userMap.get(order.userId) : null;
+
+      return {
+        id: order._id.toString(),
+        orderNumber: order._id.toString().slice(-6).toUpperCase(),
+        userId: order.userId || "",
+        customerName: order.customerName,
+        username: user?.username || "",
+        displayName: user?.displayName || "",
+        guestOrder: order.guestOrder,
+        status: order.status,
+        total: order.total,
+        creditsCharged: order.creditsCharged || 0,
+        createdAt: order.createdAt
+      };
+    });
+
+    const byUserMap = new Map();
+    for (const row of rows) {
+      const key = row.userId || row.username || `guest:${row.customerName}`;
+      const current = byUserMap.get(key) || {
+        key,
+        label: row.displayName || row.customerName,
+        username: row.username,
+        guest: row.guestOrder,
+        orderCount: 0,
+        total: 0
+      };
+
+      current.orderCount += 1;
+      current.total += row.total;
+      byUserMap.set(key, current);
+    }
+
+    const byUser = [...byUserMap.values()].sort((a, b) => b.total - a.total);
+    const totalAmount = rows.reduce((sum, row) => sum + row.total, 0);
+
+    res.json({
+      date,
+      totals: {
+        totalAmount,
+        orderCount: rows.length,
+        userCount: byUser.length
+      },
+      byUser,
+      rows
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/users", async (req, res, next) => {
+  try {
+    const user = await User.create(await userPayload(req.body));
+    res.status(201).json({ user: serializeUser(user), message: "User created" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Username already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.patch("/users/:id", async (req, res, next) => {
+  try {
+    const existingUser = await User.findById(req.params.id);
+    if (!existingUser) {
+      throw httpError(404, "User not found");
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: await userPayload(req.body, existingUser) },
+      { new: true, runValidators: true }
+    );
+
+    res.json({ user: serializeUser(user), message: "User updated" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Username already exists"));
+    }
+    return next(error);
   }
 });
 
@@ -399,13 +562,22 @@ adminRouter.post("/orders", async (req, res, next) => {
 adminRouter.patch("/orders/:id/status", async (req, res, next) => {
   try {
     const { status } = req.body;
+    const existingOrder = await Order.findById(req.params.id);
+
+    if (!existingOrder) {
+      throw httpError(404, "Order not found");
+    }
 
     if (!ORDER_STATUSES.includes(status)) {
       throw httpError(400, "Invalid order status");
     }
 
+    if (status === "confirmed" && !existingOrder.creditsCharged) {
+      throw httpError(400, "Only paid credit orders can be confirmed");
+    }
+
     const set = { status };
-    if (["pending", "preparing", "ready"].includes(status)) set.activeName = true;
+    if (["pending", "confirmed", "preparing", "ready"].includes(status)) set.activeName = true;
     if (status === "ready") {
       set.readyAt = new Date();
       set.notificationPingAt = new Date();
@@ -417,10 +589,6 @@ adminRouter.patch("/orders/:id/status", async (req, res, next) => {
     }
 
     const order = await Order.findByIdAndUpdate(req.params.id, { $set: set }, { new: true });
-
-    if (!order) {
-      throw httpError(404, "Order not found");
-    }
 
     let push = null;
     if (status === "ready" && order.linkedDeviceId) {

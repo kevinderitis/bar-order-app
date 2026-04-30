@@ -11,6 +11,7 @@ import {
   Drumstick,
   GlassWater,
   Loader2,
+  Menu,
   Martini,
   Minus,
   Plus,
@@ -30,6 +31,7 @@ import { getDeviceId } from "../lib/device.js";
 
 const PUSH_LOG_PREFIX = "[ReadyOrderPush:Client]";
 const NAME_KEY = "ready-order-customer-name";
+const CUSTOMER_TOKEN_KEY = "ready-order-customer-token";
 const PROMO_COLLAPSE_DISTANCE = 220;
 const PROMO_EXPANDED_HEIGHT = 176;
 const PROMO_EXPANDED_MARGIN = 8;
@@ -41,6 +43,7 @@ function isRunningInstalled() {
 
 const statusLabels = {
   pending: "Pending",
+  confirmed: "Confirmed",
   preparing: "Preparing",
   ready: "Ready for pickup",
   delivered: "Delivered"
@@ -48,6 +51,7 @@ const statusLabels = {
 
 const statusTone = {
   pending: "warm",
+  confirmed: "success",
   preparing: "warm",
   ready: "ready",
   delivered: "success"
@@ -55,6 +59,7 @@ const statusTone = {
 
 const statusMessages = {
   pending: "Your order was received. We will start preparing it soon.",
+  confirmed: "Your order is confirmed and paid. We will start preparing it soon.",
   preparing: "Freshly in progress. We will send an alert as soon as it is time to pick up.",
   ready: "Please come to the pickup counter when you are ready.",
   delivered: "Thanks for ordering with us."
@@ -134,6 +139,7 @@ function arrayBufferToBase64Url(buffer) {
 
 function StatusIcon({ status, loading }) {
   if (loading) return <Loader2 className="spin" size={18} />;
+  if (status === "confirmed") return <CheckCircle2 size={18} />;
   if (status === "ready" || status === "delivered") return <CheckCircle2 size={18} />;
   if (status === "pending" || status === "preparing") return <Clock3 size={18} />;
   return <Sparkles size={18} />;
@@ -492,10 +498,61 @@ async function showLocalOrderNotification(order) {
   }
 }
 
-function NameGate({ initialName, onContinue }) {
+function AccountAccessModal({ visible, busy, message, username, password, onUsernameChange, onPasswordChange, onClose, onSubmit }) {
+  if (!visible) return null;
+
+  return (
+    <div className="notification-modal-overlay" role="dialog" aria-modal="true" aria-label="Sign in">
+      <section className="notification-modal notification-required-modal">
+        <div className="modal-copy">
+          <h2>Sign in</h2>
+          <p>Use your username and password to order with credits and see your order history.</p>
+        </div>
+        <div className="admin-editor-form">
+          <label>
+            <span>Username</span>
+            <input value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+          {message ? <div className="status-pill status-warm">{message}</div> : null}
+          <div className="modal-actions">
+            <button className="modal-primary" type="button" onClick={onSubmit} disabled={busy}>
+              {busy ? <Loader2 className="spin" size={18} /> : <BellRing size={18} />}
+              <span>Sign in</span>
+            </button>
+            <button className="admin-secondary modal-secondary" type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NameGate({
+  initialName,
+  onContinue,
+  onSignIn,
+  loginBusy,
+  loginMessage,
+  username,
+  password,
+  onUsernameChange,
+  onPasswordChange
+}) {
   const [name, setName] = useState(initialName || "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [guestMode, setGuestMode] = useState(Boolean(initialName));
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -532,29 +589,69 @@ function NameGate({ initialName, onContinue }) {
         <div className="customer-copy">
           <p className="eyebrow">Arena Bar</p>
           <h1>Start your pickup</h1>
-          <p>Choose a unique name so the bar can call your order.</p>
+          <p>Sign in with your account or continue as a guest.</p>
         </div>
         <label className="name-field">
-          <span>Your name</span>
+          <span>Username</span>
+          <input value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" />
+        </label>
+        <label className="name-field">
+          <span>Password</span>
           <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="e.g. Kevin"
-            maxLength={80}
-            autoComplete="name"
+            type="password"
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            autoComplete="current-password"
           />
         </label>
-        <button className="scan-button" type="submit" disabled={busy}>
-          {busy ? <Loader2 className="spin" size={22} /> : <Utensils size={22} />}
-          <span>Enter menu</span>
+        <button className="scan-button" type="button" onClick={onSignIn} disabled={loginBusy}>
+          {loginBusy ? <Loader2 className="spin" size={22} /> : <BellRing size={22} />}
+          <span>Sign in</span>
         </button>
-        {message ? <div className="status-pill status-warm">{message}</div> : null}
+        {loginMessage ? <div className="status-pill status-warm">{loginMessage}</div> : null}
+        <button className="guest-button" type="button" onClick={() => setGuestMode(true)}>
+          Continue as guest
+        </button>
+        {guestMode ? (
+          <>
+            <label className="name-field">
+              <span>Your name</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Kevin"
+                maxLength={80}
+                autoComplete="name"
+              />
+            </label>
+            <button className="scan-button" type="submit" disabled={busy}>
+              {busy ? <Loader2 className="spin" size={22} /> : <Utensils size={22} />}
+              <span>Enter as guest</span>
+            </button>
+            {message ? <div className="status-pill status-warm">{message}</div> : null}
+          </>
+        ) : null}
       </form>
     </main>
   );
 }
 
-function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onCheckout, onOpenOrder, order }) {
+function MenuView({
+  customerName,
+  currentUser,
+  menu,
+  cart,
+  onAdd,
+  onAddPromo,
+  onRemove,
+  onCheckout,
+  onOpenOrder,
+  onLoginClick,
+  onHistory,
+  onProfile,
+  onLogout,
+  order
+}) {
   const menuListRef = useRef(null);
   const promoTrackRef = useRef(null);
   const menuTouchYRef = useRef(null);
@@ -568,6 +665,7 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   const [menuScrollLocked, setMenuScrollLocked] = useState(false);
   const [activePromo, setActivePromo] = useState(null);
   const [promoMessage, setPromoMessage] = useState("");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState({});
   const [selectedOptionGroups, setSelectedOptionGroups] = useState({});
   const [selectedExtras, setSelectedExtras] = useState({});
@@ -818,14 +916,48 @@ function MenuView({ customerName, menu, cart, onAdd, onAddPromo, onRemove, onChe
   return (
     <main className="menu-page">
       <header className="menu-header">
-        <div>
-          <p className="eyebrow">Pickup menu</p>
+        <div className="menu-header-copy">
+          {currentUser ? <p className="eyebrow">Credits {money(currentUser.credits)}</p> : <p className="eyebrow">Pickup menu</p>}
           <h1>Hi, {customerName}</h1>
         </div>
-        <button className="menu-order-chip" type="button" onClick={onOpenOrder} disabled={!order}>
-          <ShoppingBag size={17} />
-          <span>{order ? `#${order.orderNumber}` : "No order"}</span>
-        </button>
+        <div className="menu-header-actions">
+          <button className="menu-order-chip" type="button" onClick={onOpenOrder} disabled={!order}>
+            <ShoppingBag size={17} />
+            <span>{order ? `#${order.orderNumber}` : "No order"}</span>
+          </button>
+          <div className="account-menu-shell">
+            <button
+              className="menu-order-chip menu-icon-chip"
+              type="button"
+              onClick={() => setAccountMenuOpen((value) => !value)}
+              aria-expanded={accountMenuOpen}
+              aria-label="Account menu"
+            >
+              <Menu size={18} />
+            </button>
+            {accountMenuOpen ? (
+              <div className="account-menu-popover">
+                {currentUser ? (
+                  <>
+                  <button type="button" onClick={() => { setAccountMenuOpen(false); onProfile(); }}>
+                    Profile
+                  </button>
+                  <button type="button" onClick={() => { setAccountMenuOpen(false); onHistory(); }}>
+                    Orders
+                  </button>
+                  <button type="button" onClick={() => { setAccountMenuOpen(false); onLogout(); }}>
+                    Log out
+                  </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => { setAccountMenuOpen(false); onLoginClick(); }}>
+                    Login
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </header>
 
       <section
@@ -1198,7 +1330,7 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
 
         <div className={`status-pill status-${tone}`} role="status" aria-live="polite">
           <StatusIcon status={order?.status} loading={loading} />
-          <span>{statusMessages[order.status] || order.message}</span>
+          <span>{order.message || statusMessages[order.status]}</span>
         </div>
 
         <div className="customer-secondary-actions">
@@ -1218,16 +1350,75 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
   );
 }
 
+function HistoryView({ orders, onBack }) {
+  return (
+    <main className="confirm-page">
+      <header className="confirm-header">
+        <button className="admin-secondary" type="button" onClick={onBack}>
+          <ChevronLeft size={17} />
+          <span>Menu</span>
+        </button>
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1>Order history</h1>
+        </div>
+      </header>
+      <section className="confirm-panel">
+        {orders.length === 0 ? <div className="menu-empty">No previous orders yet</div> : null}
+        {orders.map((order) => (
+          <div className="confirm-row" key={order.id}>
+            <div>
+              <strong>#{order.orderNumber}</strong>
+              <span>{new Date(order.createdAt).toLocaleString("en-GB", { timeZone: "Asia/Bangkok" })}</span>
+              <span>{order.items?.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</span>
+            </div>
+            <span>{money(order.total)}</span>
+          </div>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function ProfileView({ user, onBack }) {
+  return (
+    <main className="confirm-page">
+      <header className="confirm-header">
+        <button className="admin-secondary" type="button" onClick={onBack}>
+          <ChevronLeft size={17} />
+          <span>Menu</span>
+        </button>
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1>Profile</h1>
+        </div>
+      </header>
+      <section className="confirm-panel">
+        <div className="confirm-row">
+          <div>
+            <strong>{user?.displayName}</strong>
+            <span>@{user?.username}</span>
+          </div>
+          <strong>{money(user?.credits)}</strong>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function CustomerApp() {
   const deviceId = useMemo(() => getDeviceId(), []);
   const lastPingRef = useRef(localStorage.getItem("ready-order-last-ping") || "");
   const previousStatusRef = useRef("");
+  const [customerToken, setCustomerToken] = useState(() => localStorage.getItem(CUSTOMER_TOKEN_KEY) || "");
   const [customerName, setCustomerName] = useState(() => localStorage.getItem(NAME_KEY) || "");
+  const [currentUser, setCurrentUser] = useState(null);
   const [menu, setMenu] = useState({ promotions: [], items: [], extras: [] });
   const [cart, setCart] = useState([]);
   const [notes, setNotes] = useState("");
   const [order, setOrder] = useState(null);
-  const [view, setView] = useState(customerName ? "menu" : "name");
+  const [view, setView] = useState(customerName || localStorage.getItem(CUSTOMER_TOKEN_KEY) ? "menu" : "name");
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushAvailable, setPushAvailable] = useState(false);
@@ -1237,6 +1428,11 @@ export default function CustomerApp() {
   const [isInstalled, setIsInstalled] = useState(() => isRunningInstalled());
   const [installDismissed, setInstallDismissed] = useState(false);
   const [installMessage, setInstallMessage] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginMessage, setLoginMessage] = useState("");
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState(() =>
     canNotify() ? Notification.permission : "unsupported"
   );
@@ -1287,8 +1483,9 @@ export default function CustomerApp() {
 
   const refreshOrder = useCallback(async () => {
     try {
-      const data = await api.getCustomerOrder(deviceId);
+      const data = await api.getCustomerOrder(deviceId, customerToken);
       setOrder(data.order);
+      if (data.user) setCurrentUser(data.user);
 
       if (data.order?.status && previousStatusRef.current && data.order.status !== previousStatusRef.current) {
         setStatusPulse(false);
@@ -1305,7 +1502,7 @@ export default function CustomerApp() {
     } catch {
       // Polling should never block ordering.
     }
-  }, [deviceId]);
+  }, [customerToken, deviceId]);
 
   useEffect(() => {
     api.getMenu().then(setMenu).catch(() => {});
@@ -1313,6 +1510,21 @@ export default function CustomerApp() {
     const timer = window.setInterval(refreshOrder, 4000);
     return () => window.clearInterval(timer);
   }, [refreshOrder]);
+
+  useEffect(() => {
+    if (!customerToken) {
+      setCurrentUser(null);
+      return;
+    }
+
+    api.getCustomerMe(customerToken)
+      .then((data) => setCurrentUser(data.user))
+      .catch(() => {
+        localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+        setCustomerToken("");
+        setCurrentUser(null);
+      });
+  }, [customerToken]);
 
   useEffect(() => {
     async function checkPushState() {
@@ -1397,6 +1609,34 @@ export default function CustomerApp() {
           permission={notificationPermission}
           busy={notificationBusy}
           onEnable={enableNotifications}
+        />
+        <AccountAccessModal
+          visible={loginModalOpen}
+          busy={loginBusy}
+          message={loginMessage}
+          username={loginUsername}
+          password={loginPassword}
+          onUsernameChange={setLoginUsername}
+          onPasswordChange={setLoginPassword}
+          onClose={() => setLoginModalOpen(false)}
+          onSubmit={async () => {
+            setLoginBusy(true);
+            setLoginMessage("");
+            try {
+              const data = await api.loginCustomer({ username: loginUsername, password: loginPassword });
+              localStorage.setItem(CUSTOMER_TOKEN_KEY, data.token);
+              setCustomerToken(data.token);
+              setCurrentUser(data.user);
+              setCustomerName(data.user.displayName);
+              localStorage.setItem(NAME_KEY, data.user.displayName);
+              setLoginModalOpen(false);
+              setView("menu");
+            } catch (error) {
+              setLoginMessage(error.message);
+            } finally {
+              setLoginBusy(false);
+            }
+          }}
         />
       </>
     );
@@ -1527,8 +1767,9 @@ export default function CustomerApp() {
           extras: item.extras || [],
           quantity: item.quantity
         }))
-      });
+      }, customerToken);
       setOrder(data.order);
+      if (data.user) setCurrentUser(data.user);
       setCart([]);
       setNotes("");
       setView("order");
@@ -1541,7 +1782,54 @@ export default function CustomerApp() {
   if (view === "name") {
     return (
       <>
-        <NameGate initialName={customerName} onContinue={(name) => { setCustomerName(name); setView("menu"); }} />
+        <NameGate
+          initialName={customerName}
+          onContinue={(name) => {
+            setCustomerName(name);
+            setView("menu");
+          }}
+          onSignIn={async () => {
+            setLoginBusy(true);
+            setLoginMessage("");
+            try {
+              const data = await api.loginCustomer({ username: loginUsername, password: loginPassword });
+              localStorage.setItem(CUSTOMER_TOKEN_KEY, data.token);
+              setCustomerToken(data.token);
+              setCurrentUser(data.user);
+              setCustomerName(data.user.displayName);
+              localStorage.setItem(NAME_KEY, data.user.displayName);
+              setView("menu");
+            } catch (error) {
+              setLoginMessage(error.message);
+            } finally {
+              setLoginBusy(false);
+            }
+          }}
+          loginBusy={loginBusy}
+          loginMessage={loginMessage}
+          username={loginUsername}
+          password={loginPassword}
+          onUsernameChange={setLoginUsername}
+          onPasswordChange={setLoginPassword}
+        />
+        {renderCustomerOverlays()}
+      </>
+    );
+  }
+
+  if (view === "history") {
+    return (
+      <>
+        <HistoryView orders={history} onBack={() => setView("menu")} />
+        {renderCustomerOverlays()}
+      </>
+    );
+  }
+
+  if (view === "profile" && currentUser) {
+    return (
+      <>
+        <ProfileView user={currentUser} onBack={() => setView("menu")} />
         {renderCustomerOverlays()}
       </>
     );
@@ -1587,6 +1875,7 @@ export default function CustomerApp() {
     <>
       <MenuView
         customerName={customerName}
+        currentUser={currentUser}
         menu={menu}
         cart={cart}
         onAdd={addItem}
@@ -1594,6 +1883,22 @@ export default function CustomerApp() {
         onRemove={removeItem}
         onCheckout={() => setView("confirm")}
         onOpenOrder={() => order && setView("order")}
+        onLoginClick={() => setLoginModalOpen(true)}
+        onHistory={async () => {
+          if (!customerToken) return;
+          const data = await api.getCustomerHistory(customerToken);
+          setHistory(data.orders || []);
+          setView("history");
+        }}
+        onProfile={() => setView("profile")}
+        onLogout={() => {
+          localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+          setCustomerToken("");
+          setCurrentUser(null);
+          setLoginUsername("");
+          setLoginPassword("");
+          setView("menu");
+        }}
         order={order}
       />
       {renderCustomerOverlays()}

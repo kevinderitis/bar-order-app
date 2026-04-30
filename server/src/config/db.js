@@ -5,6 +5,7 @@ import { MenuItem } from "../models/MenuItem.js";
 import { Order } from "../models/Order.js";
 import { Promotion } from "../models/Promotion.js";
 import { PushSubscription } from "../models/PushSubscription.js";
+import { User } from "../models/User.js";
 import { seedMenuIfEmpty } from "../utils/seedMenu.js";
 
 async function dropLegacyStatusIndexIfNeeded() {
@@ -32,6 +33,7 @@ export async function connectDatabase() {
   await Order.init();
   await Promotion.init();
   await PushSubscription.init();
+  await User.init();
   await seedMenuIfEmpty();
   console.log("MongoDB connected");
 }

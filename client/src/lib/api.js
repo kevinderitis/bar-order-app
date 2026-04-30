@@ -21,7 +21,13 @@ async function request(path, options = {}) {
 
 export const api = {
   login: (body) => request("/admin/login", { method: "POST", body }),
+  loginCustomer: (body) => request("/customer/auth/login", { method: "POST", body }),
+  getCustomerMe: (token) => request("/customer/auth/me", { token }),
   getOrders: (token) => request("/admin/orders", { token }),
+  getAdminDailyReport: (token, date) => request(`/admin/reports/daily?date=${encodeURIComponent(date)}`, { token }),
+  getAdminUsers: (token) => request("/admin/users", { token }),
+  createAdminUser: (token, body) => request("/admin/users", { method: "POST", token, body }),
+  updateAdminUser: (token, id, body) => request(`/admin/users/${id}`, { method: "PATCH", token, body }),
   createOrder: (token, customerName) =>
     request("/admin/orders", { method: "POST", token, body: { customerName } }),
   updateStatus: (token, id, status) =>
@@ -42,8 +48,10 @@ export const api = {
   deletePromotion: (token, id) => request(`/admin/promotions/${id}`, { method: "DELETE", token }),
   getMenu: () => request("/customer/menu"),
   checkNameAvailability: (name) => request(`/customer/name-availability?name=${encodeURIComponent(name)}`),
-  createCustomerOrder: (body) => request("/customer/orders", { method: "POST", body }),
-  getCustomerOrder: (deviceId) => request(`/customer/order?deviceId=${encodeURIComponent(deviceId)}`),
+  createCustomerOrder: (body, token) => request("/customer/orders", { method: "POST", body, token }),
+  getCustomerOrder: (deviceId, token) =>
+    request(`/customer/order?deviceId=${encodeURIComponent(deviceId)}`, { token }),
+  getCustomerHistory: (token) => request("/customer/history", { token }),
   getPushConfig: () => request("/customer/push-config"),
   savePushSubscription: (deviceId, subscription) =>
     request("/customer/push-subscriptions", {

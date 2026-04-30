@@ -13,12 +13,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import BrandMark from "../components/BrandMark.jsx";
 import { api } from "../lib/api.js";
 
-const STATUSES = ["pending", "preparing", "ready", "delivered"];
-const TABS = ["orders", "menu", "extras", "promotions"];
+const STATUSES = ["pending", "confirmed", "preparing", "ready", "delivered"];
+const TABS = ["orders", "reports", "users", "menu", "extras", "promotions"];
 const ORDER_PAGE_SIZE = 10;
 
 const statusLabels = {
   pending: "Pending",
+  confirmed: "Confirmed",
   preparing: "Preparing",
   ready: "Ready",
   delivered: "Delivered"
@@ -57,6 +58,14 @@ const emptyExtraForm = {
   sortOrder: 0
 };
 
+const emptyUserForm = {
+  username: "",
+  displayName: "",
+  password: "",
+  credits: 0,
+  active: true
+};
+
 function orderItemDetails(item) {
   const extras = item.extras?.length ? `Extras: ${item.extras.map((extra) => extra.name).join(", ")}` : "";
   return [item.option, extras].filter(Boolean).join(" · ");
@@ -79,6 +88,21 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function todayInThailand() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+
+  return formatter.format(new Date());
+}
+
+function availableStatusesForOrder(order) {
+  return STATUSES.filter((status) => status !== "confirmed" || Number(order.creditsCharged || 0) > 0 || order.status === "confirmed");
 }
 
 function listToText(value) {
@@ -156,9 +180,14 @@ function AdminModal({ title, eyebrow, children, onClose }) {
 function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
   const [page, setPage] = useState(1);
   const [expandedOrderId, setExpandedOrderId] = useState("");
-  const pageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
+  const [statusFilter, setStatusFilter] = useState("all");
+  const filteredOrders = useMemo(
+    () => (statusFilter === "all" ? orders : orders.filter((order) => order.status === statusFilter)),
+    [orders, statusFilter]
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
-  const visibleOrders = orders.slice((safePage - 1) * ORDER_PAGE_SIZE, safePage * ORDER_PAGE_SIZE);
+  const visibleOrders = filteredOrders.slice((safePage - 1) * ORDER_PAGE_SIZE, safePage * ORDER_PAGE_SIZE);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -166,8 +195,37 @@ function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
 
   return (
     <section className="admin-orders-panel" aria-label="Orders">
-      {orders.length === 0 ? (
-        <div className="empty-orders">No orders yet</div>
+      <div className="admin-users-toolbar">
+        <div>
+          <p className="eyebrow">Orders</p>
+          <h2>Live orders</h2>
+        </div>
+        <div className="admin-filter-group" role="tablist" aria-label="Order status filter">
+          {[
+            { value: "all", label: "All" },
+            { value: "confirmed", label: "Confirmed" },
+            { value: "pending", label: "Pending" },
+            { value: "preparing", label: "Preparing" },
+            { value: "ready", label: "Ready" },
+            { value: "delivered", label: "Delivered" }
+          ].map((filter) => (
+            <button
+              key={filter.value}
+              className={statusFilter === filter.value ? "admin-filter-button admin-filter-button-active" : "admin-filter-button"}
+              type="button"
+              onClick={() => {
+                setStatusFilter(filter.value);
+                setPage(1);
+              }}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filteredOrders.length === 0 ? (
+        <div className="empty-orders">{orders.length === 0 ? "No orders yet" : "No orders match this filter"}</div>
       ) : (
         <>
           <div className="admin-orders-table">
@@ -227,7 +285,7 @@ function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
 
                       <div className="admin-order-controls">
                         <select value={order.status} onChange={(event) => onStatusChange(order.id, event.target.value)}>
-                          {STATUSES.map((status) => (
+                          {availableStatusesForOrder(order).map((status) => (
                             <option value={status} key={status}>
                               {statusLabels[status]}
                             </option>
@@ -504,6 +562,303 @@ function ExtrasSection({
   );
 }
 
+function UsersSection({
+  users,
+  form,
+  editingId,
+  modalOpen,
+  setForm,
+  onSubmit,
+  onEdit,
+  onCreate,
+  onCancel,
+  onToggle,
+  onAddCredits
+}) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [creditTarget, setCreditTarget] = useState(null);
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditBusy, setCreditBusy] = useState(false);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesQuery = normalizedQuery
+        ? user.username.toLowerCase().includes(normalizedQuery) ||
+          user.displayName.toLowerCase().includes(normalizedQuery)
+        : true;
+
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && user.active) ||
+        (statusFilter === "inactive" && !user.active);
+
+      return matchesQuery && matchesStatus;
+    });
+  }, [query, statusFilter, users]);
+
+  async function handleCreditsSubmit(event) {
+    event.preventDefault();
+    if (!creditTarget) return;
+
+    setCreditBusy(true);
+    const success = await onAddCredits(creditTarget, creditAmount);
+    setCreditBusy(false);
+
+    if (!success) return;
+
+    setCreditTarget(null);
+    setCreditAmount("");
+  }
+
+  return (
+    <section className="admin-list-section" aria-label="Users editor">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Users</p>
+          <h2>Customer accounts</h2>
+        </div>
+        <button className="admin-primary" type="button" onClick={onCreate}>
+          <PlusCircle size={17} />
+          <span>Create user</span>
+        </button>
+      </div>
+
+      <div className="admin-users-toolbar">
+        <label className="admin-search-field">
+          <span>Search users</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name or username"
+          />
+        </label>
+
+        <div className="admin-filter-group" role="tablist" aria-label="User status filter">
+          {[
+            { value: "all", label: "All" },
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" }
+          ].map((filter) => (
+            <button
+              key={filter.value}
+              className={statusFilter === filter.value ? "admin-filter-button admin-filter-button-active" : "admin-filter-button"}
+              type="button"
+              onClick={() => setStatusFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="admin-menu-list">
+        {filteredUsers.length === 0 ? (
+          <div className="empty-orders">No users found</div>
+        ) : filteredUsers.map((user) => (
+          <article className={user.active ? "admin-menu-card" : "admin-menu-card admin-muted-card"} key={user.id}>
+            <div>
+              <span>@{user.username}</span>
+              <h3>{user.displayName}</h3>
+              <p>{user.active ? "Active account" : "Inactive account"}</p>
+            </div>
+            <strong>{money(user.credits)}</strong>
+            <div className="admin-card-actions">
+              <button
+                className="admin-primary admin-primary-compact"
+                type="button"
+                onClick={() => {
+                  setCreditTarget(user);
+                  setCreditAmount("");
+                }}
+              >
+                <PlusCircle size={15} />
+                <span>Add credits</span>
+              </button>
+              <button className="admin-secondary" type="button" onClick={() => onToggle(user)}>
+                {user.active ? "Disable" : "Activate"}
+              </button>
+              <button className="admin-icon-button" type="button" onClick={() => onEdit(user)} aria-label={`Edit ${user.displayName}`}>
+                <Edit3 size={15} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {creditTarget ? (
+        <AdminModal title="Add credits" eyebrow={`@${creditTarget.username}`} onClose={() => setCreditTarget(null)}>
+          <form className="admin-editor-form" onSubmit={handleCreditsSubmit}>
+            <label>
+              <span>Current balance</span>
+              <input value={money(creditTarget.credits)} readOnly />
+            </label>
+            <label>
+              <span>Credits to add</span>
+              <input
+                value={creditAmount}
+                onChange={(event) => setCreditAmount(event.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+                autoFocus
+              />
+            </label>
+            <button className="admin-primary" type="submit" disabled={creditBusy}>
+              <PlusCircle size={17} />
+              <span>{creditBusy ? "Adding..." : "Add credits"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
+
+      {modalOpen ? (
+        <AdminModal title={editingId ? "Edit user" : "Create user"} eyebrow="Users" onClose={onCancel}>
+          <form className="admin-editor-form" onSubmit={onSubmit}>
+            <label>
+              <span>Username</span>
+              <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
+            </label>
+            <label>
+              <span>Display name</span>
+              <input value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
+            </label>
+            <label>
+              <span>{editingId ? "New password (optional)" : "Password"}</span>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Credits</span>
+              <input
+                value={form.credits}
+                onChange={(event) => setForm({ ...form, credits: event.target.value })}
+                inputMode="decimal"
+              />
+            </label>
+            <div className="admin-checks">
+              <label>
+                <input
+                  checked={form.active}
+                  type="checkbox"
+                  onChange={(event) => setForm({ ...form, active: event.target.checked })}
+                />
+                <span>Active</span>
+              </label>
+            </div>
+            <button className="admin-primary" type="submit">
+              {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
+              <span>{editingId ? "Save user" : "Create user"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
+    </section>
+  );
+}
+
+function ReportsSection({ reportDate, setReportDate, report, onRefresh, loading }) {
+  const rows = report?.rows || [];
+  const byUser = report?.byUser || [];
+  const totals = report?.totals || { totalAmount: 0, orderCount: 0, userCount: 0 };
+
+  return (
+    <section className="admin-list-section" aria-label="Daily reports">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Reports</p>
+          <h2>Daily consumption</h2>
+        </div>
+        <div className="admin-reports-actions">
+          <label className="admin-search-field">
+            <span>Thailand day</span>
+            <input type="date" value={reportDate} onChange={(event) => setReportDate(event.target.value)} />
+          </label>
+          <button className="admin-primary" type="button" onClick={onRefresh} disabled={loading}>
+            <span>{loading ? "Loading..." : "Load report"}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="admin-report-summary">
+        <article className="admin-report-card">
+          <span>Total</span>
+          <strong>{money(totals.totalAmount)}</strong>
+        </article>
+        <article className="admin-report-card">
+          <span>Orders</span>
+          <strong>{totals.orderCount}</strong>
+        </article>
+        <article className="admin-report-card">
+          <span>Users</span>
+          <strong>{totals.userCount}</strong>
+        </article>
+      </div>
+
+      <div className="admin-report-layout">
+        <section className="admin-report-panel">
+          <div className="admin-report-panel-head">
+            <h3>By user</h3>
+            <small>{reportDate}</small>
+          </div>
+          {byUser.length === 0 ? (
+            <div className="empty-orders">No orders for this day</div>
+          ) : (
+            <div className="admin-report-user-list">
+              {byUser.map((entry) => (
+                <article className="admin-report-user-row" key={entry.key}>
+                  <div>
+                    <strong>{entry.label}</strong>
+                    <small>{entry.guest ? "Guest" : `@${entry.username}`}</small>
+                  </div>
+                  <div>
+                    <small>{entry.orderCount} orders</small>
+                    <strong>{money(entry.total)}</strong>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-report-panel">
+          <div className="admin-report-panel-head">
+            <h3>Orders</h3>
+            <small>{rows.length} rows</small>
+          </div>
+          {rows.length === 0 ? (
+            <div className="empty-orders">No orders for this day</div>
+          ) : (
+            <div className="admin-report-rows">
+              {rows.map((row) => (
+                <article className="admin-report-order-row" key={row.id}>
+                  <div>
+                    <strong>#{row.orderNumber}</strong>
+                    <small>{formatDate(row.createdAt)}</small>
+                  </div>
+                  <div>
+                    <strong>{row.displayName || row.customerName}</strong>
+                    <small>{row.guestOrder ? "Guest" : `@${row.username}`}</small>
+                  </div>
+                  <div>
+                    <strong>{money(row.total)}</strong>
+                    <small>{statusLabels[row.status]}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function PromotionsSection({
   promotions,
   menuItems,
@@ -676,13 +1031,20 @@ export default function AdminApp() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [extras, setExtras] = useState([]);
   const [promotions, setPromotions] = useState([]);
+  const [reportDate, setReportDate] = useState(() => todayInThailand());
+  const [report, setReport] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("orders");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItemForm);
+  const [userForm, setUserForm] = useState(emptyUserForm);
+  const [editingUserId, setEditingUserId] = useState("");
+  const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState("");
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [extraForm, setExtraForm] = useState(emptyExtraForm);
@@ -704,6 +1066,25 @@ export default function AdminApp() {
     setMenuItems(data.items);
   }, [token]);
 
+  const loadUsers = useCallback(async () => {
+    if (!token) return;
+    const data = await api.getAdminUsers(token);
+    setUsers(data.users);
+  }, [token]);
+
+  const loadReport = useCallback(async (date = reportDate) => {
+    if (!token || !date) return;
+    setReportLoading(true);
+    try {
+      const data = await api.getAdminDailyReport(token, date);
+      setReport(data);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [reportDate, token]);
+
   const loadPromotions = useCallback(async () => {
     if (!token) return;
     const data = await api.getAdminPromotions(token);
@@ -719,7 +1100,7 @@ export default function AdminApp() {
   const loadAll = useCallback(async () => {
     if (!token) return;
     try {
-      await Promise.all([loadOrders(), loadMenu(), loadExtras(), loadPromotions()]);
+      await Promise.all([loadOrders(), loadUsers(), loadMenu(), loadExtras(), loadPromotions()]);
     } catch (error) {
       setMessage(error.message);
       if (error.message.includes("session") || error.message.includes("Authentication")) {
@@ -727,13 +1108,19 @@ export default function AdminApp() {
         setToken("");
       }
     }
-  }, [loadExtras, loadMenu, loadOrders, loadPromotions, token]);
+  }, [loadExtras, loadMenu, loadOrders, loadPromotions, loadUsers, token]);
 
   useEffect(() => {
     loadAll();
     const timer = window.setInterval(loadOrders, 5000);
     return () => window.clearInterval(timer);
   }, [loadAll, loadOrders]);
+
+  useEffect(() => {
+    if (token && activeTab === "reports") {
+      loadReport(reportDate);
+    }
+  }, [activeTab, loadReport, reportDate, token]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -790,9 +1177,11 @@ export default function AdminApp() {
     localStorage.removeItem("ready-order-admin-token");
     setToken("");
     setOrders([]);
+    setUsers([]);
     setMenuItems([]);
     setExtras([]);
     setPromotions([]);
+    setReport(null);
   }
 
   function editItem(item) {
@@ -810,6 +1199,73 @@ export default function AdminApp() {
       featured: item.featured,
       sortOrder: item.sortOrder || 0
     });
+  }
+
+  function editUser(user) {
+    setEditingUserId(user.id);
+    setUserModalOpen(true);
+    setUserForm({
+      username: user.username,
+      displayName: user.displayName,
+      password: "",
+      credits: user.credits,
+      active: user.active
+    });
+  }
+
+  function createUser() {
+    setEditingUserId("");
+    setUserForm(emptyUserForm);
+    setUserModalOpen(true);
+  }
+
+  async function submitUser(event) {
+    event.preventDefault();
+    setMessage("");
+    try {
+      const data = editingUserId
+        ? await api.updateAdminUser(token, editingUserId, userForm)
+        : await api.createAdminUser(token, userForm);
+      setMessage(data.message);
+      setUserForm(emptyUserForm);
+      setEditingUserId("");
+      setUserModalOpen(false);
+      await loadUsers();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function toggleUser(user) {
+    try {
+      const data = await api.updateAdminUser(token, user.id, { ...user, active: !user.active, password: "" });
+      setMessage(data.message);
+      await loadUsers();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function addUserCredits(user, amount) {
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setMessage("Enter a valid credit amount");
+      return false;
+    }
+
+    try {
+      const data = await api.updateAdminUser(token, user.id, {
+        ...user,
+        credits: Number(user.credits || 0) + parsedAmount,
+        password: ""
+      });
+      setMessage(data.message);
+      await loadUsers();
+      return true;
+    } catch (error) {
+      setMessage(error.message);
+      return false;
+    }
   }
 
   function createItem() {
@@ -1031,6 +1487,36 @@ export default function AdminApp() {
           onStatusChange={handleStatusChange}
           onPing={handlePing}
           onDelete={handleDelete}
+        />
+      ) : null}
+
+      {activeTab === "reports" ? (
+        <ReportsSection
+          reportDate={reportDate}
+          setReportDate={setReportDate}
+          report={report}
+          onRefresh={() => loadReport(reportDate)}
+          loading={reportLoading}
+        />
+      ) : null}
+
+      {activeTab === "users" ? (
+        <UsersSection
+          users={users}
+          form={userForm}
+          editingId={editingUserId}
+          modalOpen={userModalOpen}
+          setForm={setUserForm}
+          onSubmit={submitUser}
+          onEdit={editUser}
+          onCreate={createUser}
+          onCancel={() => {
+            setEditingUserId("");
+            setUserForm(emptyUserForm);
+            setUserModalOpen(false);
+          }}
+          onToggle={toggleUser}
+          onAddCredits={addUserCredits}
         />
       ) : null}
 

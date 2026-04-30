@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 export const ORDER_STATUSES = [
   "pending",
+  "confirmed",
   "preparing",
   "ready",
   "delivered"
@@ -106,6 +107,17 @@ const orderSchema = new mongoose.Schema(
       default: true,
       index: true
     },
+    userId: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true
+    },
+    guestOrder: {
+      type: Boolean,
+      default: true,
+      index: true
+    },
     status: {
       type: String,
       enum: ORDER_STATUSES,
@@ -135,6 +147,11 @@ const orderSchema = new mongoose.Schema(
     total: {
       type: Number,
       required: true,
+      min: 0
+    },
+    creditsCharged: {
+      type: Number,
+      default: 0,
       min: 0
     },
     notes: {
