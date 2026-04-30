@@ -186,6 +186,33 @@ export const defaultExtras = [
   { name: "Extra rice", price: 30, active: true, sortOrder: 50 }
 ];
 
+export const defaultGiftItems = [
+  {
+    slug: "welcome-drink",
+    name: "Welcome drink",
+    category: "Welcome",
+    description: "House welcome drink",
+    active: true,
+    sortOrder: 10
+  },
+  {
+    slug: "gift-beer",
+    name: "Gift beer",
+    category: "Drinks",
+    description: "Beer gift for welcome rewards",
+    active: true,
+    sortOrder: 20
+  },
+  {
+    slug: "gift-pizza",
+    name: "Gift pizza",
+    category: "Food",
+    description: "Pizza gift for welcome rewards",
+    active: true,
+    sortOrder: 30
+  }
+];
+
 export const defaultPromotions = [
   {
     title: "Free Thai Food",

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { GiftItem } from "../models/GiftItem.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
@@ -20,6 +21,7 @@ function serializeOrder(order) {
     customerName: order.customerName,
     userId: order.userId,
     guestOrder: order.guestOrder,
+    giftOrder: order.giftOrder,
     status: order.status,
     linkedDeviceId: order.linkedDeviceId,
     items: order.items,
@@ -37,6 +39,19 @@ function serializeOrder(order) {
   };
 }
 
+function serializeGift(gift) {
+  return {
+    id: gift._id.toString(),
+    giftItemId: gift.giftItemId || gift.menuItemId || "",
+    name: gift.name,
+    category: gift.category,
+    assignedAt: gift.assignedAt,
+    redeemedAt: gift.redeemedAt,
+    redeemedOrderId: gift.redeemedOrderId || "",
+    redeemed: Boolean(gift.redeemedAt)
+  };
+}
+
 function serializeUser(user) {
   return {
     id: user._id.toString(),
@@ -44,6 +59,7 @@ function serializeUser(user) {
     displayName: user.displayName,
     credits: user.credits,
     active: user.active,
+    gifts: (user.gifts || []).map(serializeGift),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -116,6 +132,20 @@ function serializeExtra(extra) {
     sortOrder: extra.sortOrder,
     createdAt: extra.createdAt,
     updatedAt: extra.updatedAt
+  };
+}
+
+function serializeGiftItem(item) {
+  return {
+    id: item._id.toString(),
+    slug: item.slug,
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    active: item.active,
+    sortOrder: item.sortOrder,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt
   };
 }
 
@@ -203,6 +233,23 @@ function extraPayload(body) {
   return {
     name,
     price,
+    active: body.active ?? true,
+    sortOrder: Number(body.sortOrder || 0)
+  };
+}
+
+function giftItemPayload(body) {
+  const name = String(body.name || "").trim();
+  const category = String(body.category || "").trim();
+
+  if (!name) throw httpError(400, "Gift item name is required");
+  if (!category) throw httpError(400, "Gift item category is required");
+
+  return {
+    name,
+    category,
+    slug: String(body.slug || slugify(`${category}-${name}`)).trim().toLowerCase(),
+    description: String(body.description || "").trim(),
     active: body.active ?? true,
     sortOrder: Number(body.sortOrder || 0)
   };
@@ -389,6 +436,92 @@ adminRouter.patch("/users/:id", async (req, res, next) => {
   }
 });
 
+adminRouter.post("/users/:id/gifts", async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      throw httpError(404, "User not found");
+    }
+
+    const giftItemId = String(req.body.giftItemId || "").trim();
+    if (!giftItemId) {
+      throw httpError(400, "Gift item is required");
+    }
+
+    const giftItem = await GiftItem.findOne({ slug: giftItemId });
+    if (!giftItem) {
+      throw httpError(404, "Gift item not found");
+    }
+
+    user.gifts.push({
+      giftItemId: giftItem.slug,
+      name: giftItem.name,
+      category: giftItem.category
+    });
+    await user.save();
+
+    res.status(201).json({ user: serializeUser(user), message: "Gift assigned" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/gift-items", async (_req, res, next) => {
+  try {
+    const items = await GiftItem.find().sort({ category: 1, sortOrder: 1, name: 1 });
+    res.json({ items: items.map(serializeGiftItem) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/gift-items", async (req, res, next) => {
+  try {
+    const item = await GiftItem.create(giftItemPayload(req.body));
+    res.status(201).json({ item: serializeGiftItem(item), message: "Gift item created" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Gift item slug already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.patch("/gift-items/:id", async (req, res, next) => {
+  try {
+    const item = await GiftItem.findByIdAndUpdate(
+      req.params.id,
+      { $set: giftItemPayload(req.body) },
+      { new: true, runValidators: true }
+    );
+
+    if (!item) {
+      throw httpError(404, "Gift item not found");
+    }
+
+    res.json({ item: serializeGiftItem(item), message: "Gift item updated" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "Gift item slug already exists"));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.delete("/gift-items/:id", async (req, res, next) => {
+  try {
+    const item = await GiftItem.findByIdAndDelete(req.params.id);
+
+    if (!item) {
+      throw httpError(404, "Gift item not found");
+    }
+
+    res.json({ message: "Gift item deleted" });
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRouter.get("/menu-items", async (_req, res, next) => {
   try {
     const items = await MenuItem.find().sort({ category: 1, sortOrder: 1, name: 1 });
@@ -572,8 +705,8 @@ adminRouter.patch("/orders/:id/status", async (req, res, next) => {
       throw httpError(400, "Invalid order status");
     }
 
-    if (status === "confirmed" && !existingOrder.creditsCharged) {
-      throw httpError(400, "Only paid credit orders can be confirmed");
+    if (status === "confirmed" && !existingOrder.creditsCharged && !existingOrder.giftOrder) {
+      throw httpError(400, "Only paid credit orders or gifts can be confirmed");
     }
 
     const set = { status };

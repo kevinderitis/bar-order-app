@@ -1,13 +1,15 @@
-import { defaultExtras, defaultMenuItems, defaultPromotions } from "../data/menu.js";
+import { defaultExtras, defaultGiftItems, defaultMenuItems, defaultPromotions } from "../data/menu.js";
+import { GiftItem } from "../models/GiftItem.js";
 import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Promotion } from "../models/Promotion.js";
 
 export async function seedMenuIfEmpty() {
-  const [menuItemCount, promotionCount, extraCount] = await Promise.all([
+  const [menuItemCount, promotionCount, extraCount, giftItemCount] = await Promise.all([
     MenuItem.estimatedDocumentCount(),
     Promotion.estimatedDocumentCount(),
-    MenuExtra.estimatedDocumentCount()
+    MenuExtra.estimatedDocumentCount(),
+    GiftItem.estimatedDocumentCount()
   ]);
 
   if (menuItemCount === 0) {
@@ -23,5 +25,10 @@ export async function seedMenuIfEmpty() {
   if (extraCount === 0) {
     await MenuExtra.insertMany(defaultExtras, { ordered: false });
     console.log(`Seeded ${defaultExtras.length} extras`);
+  }
+
+  if (giftItemCount === 0) {
+    await GiftItem.insertMany(defaultGiftItems, { ordered: false });
+    console.log(`Seeded ${defaultGiftItems.length} gift items`);
   }
 }

@@ -3,6 +3,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { restaurantName } from "../data/menu.js";
+import { GiftItem } from "../models/GiftItem.js";
 import { MenuExtra } from "../models/MenuExtra.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { Order } from "../models/Order.js";
@@ -153,6 +154,7 @@ function serializeOrder(order) {
     customerName: order.customerName,
     userId: order.userId,
     guestOrder: order.guestOrder,
+    giftOrder: order.giftOrder,
     status: order.status,
     items: order.items,
     subtotal: order.subtotal,
@@ -170,6 +172,19 @@ function serializeOrder(order) {
   };
 }
 
+function serializeGift(gift) {
+  return {
+    id: gift._id.toString(),
+    giftItemId: gift.giftItemId || gift.menuItemId || "",
+    name: gift.name,
+    category: gift.category,
+    assignedAt: gift.assignedAt,
+    redeemedAt: gift.redeemedAt,
+    redeemedOrderId: gift.redeemedOrderId || "",
+    redeemed: Boolean(gift.redeemedAt)
+  };
+}
+
 function serializeUser(user) {
   if (!user) return null;
 
@@ -179,8 +194,23 @@ function serializeUser(user) {
     displayName: user.displayName,
     credits: user.credits,
     active: user.active,
+    gifts: (user.gifts || []).map(serializeGift),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
+  };
+}
+
+function buildGiftOrderItem(gift) {
+  return {
+    menuItemId: `gift:${gift.giftItemId || gift.menuItemId || "custom"}`,
+    name: gift.name,
+    option: "",
+    options: [],
+    extras: [],
+    quantity: 1,
+    unitPrice: 0,
+    discountAmount: 0,
+    lineTotal: 0
   };
 }
 
@@ -555,6 +585,77 @@ customerRouter.post("/orders", async (req, res, next) => {
       order: serializeOrder(order),
       user: serializeUser(user),
       message: orderCustomerMessage(order)
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(httpError(409, "That name already has an active order"));
+    }
+    return next(error);
+  }
+});
+
+customerRouter.post("/gifts/:giftId/redeem", async (req, res, next) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    const deviceId = String(req.body.deviceId || "").trim();
+
+    if (!user) {
+      throw httpError(401, "Please sign in");
+    }
+
+    if (!user.active) {
+      throw httpError(403, "This account is inactive");
+    }
+
+    if (!deviceId) {
+      throw httpError(400, "Device session is required");
+    }
+
+    const gift = user.gifts.id(req.params.giftId);
+    if (!gift) {
+      throw httpError(404, "Gift not found");
+    }
+
+    if (gift.redeemedAt) {
+      throw httpError(409, "This gift was already redeemed");
+    }
+
+    const giftItemSlug = gift.giftItemId || gift.menuItemId || "";
+    if (giftItemSlug) {
+      const giftItem = await GiftItem.findOne({ slug: giftItemSlug });
+      if (giftItem) {
+        gift.name = giftItem.name;
+        gift.category = giftItem.category;
+      }
+    }
+    const orderItem = buildGiftOrderItem(gift);
+    const customerName = normalizeName(user.displayName);
+
+    const order = await Order.create({
+      customerName,
+      customerNameKey: nameKey(customerName),
+      userId: user._id.toString(),
+      guestOrder: false,
+      giftOrder: true,
+      linkedDeviceId: deviceId,
+      status: "confirmed",
+      activeName: true,
+      subtotal: 0,
+      discountTotal: 0,
+      total: 0,
+      creditsCharged: 0,
+      notes: "Gift",
+      items: [orderItem]
+    });
+
+    gift.redeemedAt = new Date();
+    gift.redeemedOrderId = order._id.toString();
+    await user.save();
+
+    res.status(201).json({
+      order: serializeOrder(order),
+      user: serializeUser(user),
+      message: "Your gift has been redeemed and confirmed."
     });
   } catch (error) {
     if (error?.code === 11000) {

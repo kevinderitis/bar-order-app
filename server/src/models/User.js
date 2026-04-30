@@ -1,5 +1,41 @@
 import mongoose from "mongoose";
 
+const userGiftSchema = new mongoose.Schema(
+  {
+    giftItemId: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    menuItemId: {
+      type: String,
+      trim: true
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    category: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    redeemedAt: {
+      type: Date,
+      default: null
+    },
+    redeemedOrderId: {
+      type: String,
+      trim: true,
+      default: ""
+    }
+  },
+  {
+    timestamps: { createdAt: "assignedAt", updatedAt: false }
+  }
+);
+
 const userSchema = new mongoose.Schema(
   {
     username: {
@@ -29,6 +65,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
       index: true
+    },
+    gifts: {
+      type: [userGiftSchema],
+      default: []
     }
   },
   {

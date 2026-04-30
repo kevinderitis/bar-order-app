@@ -118,6 +118,11 @@ const orderSchema = new mongoose.Schema(
       default: true,
       index: true
     },
+    giftOrder: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     status: {
       type: String,
       enum: ORDER_STATUSES,

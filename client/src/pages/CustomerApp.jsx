@@ -1307,18 +1307,31 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
           <div className="order-receipt">
             {(order.items || []).map((item) => (
               <div className="receipt-row" key={`${item.menuItemId}-${item.option || ""}-${item.extras?.map((extra) => extra.extraId).join("-") || ""}`}>
-                <span>{item.quantity}x {item.name}{itemDetailText(item) ? ` · ${itemDetailText(item)}` : ""}</span>
-                <strong>{money(item.lineTotal)}</strong>
+                <span>
+                  {item.quantity}x {item.name}
+                  {itemDetailText(item) ? ` · ${itemDetailText(item)}` : ""}
+                  {order.giftOrder ? " · Gift" : ""}
+                </span>
+                <strong>{order.giftOrder ? "Gift" : money(item.lineTotal)}</strong>
               </div>
             ))}
-            <div className="receipt-total">
-              <span>Discounts</span>
-              <strong>-{money(order.discountTotal)}</strong>
-            </div>
-            <div className="receipt-total">
-              <span>Paid</span>
-              <strong>{money(order.total)}</strong>
-            </div>
+            {order.giftOrder ? (
+              <div className="receipt-total">
+                <span>Total</span>
+                <strong>Gift</strong>
+              </div>
+            ) : (
+              <>
+                <div className="receipt-total">
+                  <span>Discounts</span>
+                  <strong>-{money(order.discountTotal)}</strong>
+                </div>
+                <div className="receipt-total">
+                  <span>Paid</span>
+                  <strong>{money(order.total)}</strong>
+                </div>
+              </>
+            )}
             {order.notes ? (
               <div className="receipt-note">
                 <span>Note</span>
@@ -1372,7 +1385,7 @@ function HistoryView({ orders, onBack }) {
               <span>{new Date(order.createdAt).toLocaleString("en-GB", { timeZone: "Asia/Bangkok" })}</span>
               <span>{order.items?.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</span>
             </div>
-            <span>{money(order.total)}</span>
+            <span>{order.giftOrder ? "Gift" : money(order.total)}</span>
           </div>
         ))}
       </section>
@@ -1380,7 +1393,9 @@ function HistoryView({ orders, onBack }) {
   );
 }
 
-function ProfileView({ user, onBack }) {
+function ProfileView({ user, onBack, onRedeemGift, redeemingGiftId, message }) {
+  const pendingGifts = (user?.gifts || []).filter((gift) => !gift.redeemed);
+
   return (
     <main className="confirm-page">
       <header className="confirm-header">
@@ -1401,9 +1416,37 @@ function ProfileView({ user, onBack }) {
           </div>
           <strong>{money(user?.credits)}</strong>
         </div>
+        <div className="confirm-section-head">
+          <strong>Welcome gifts</strong>
+          <span>{pendingGifts.length} available</span>
+        </div>
+        {message ? <div className="promo-message">{message}</div> : null}
+        {pendingGifts.length === 0 ? <div className="menu-empty">No gifts available right now</div> : null}
+        {pendingGifts.map((gift) => (
+          <div className="confirm-row gift-row" key={gift.id}>
+            <div>
+              <strong>{gift.name}</strong>
+              <span>{gift.category}</span>
+              <span>Gift item</span>
+            </div>
+            <button
+              className="admin-primary"
+              type="button"
+              onClick={() => onRedeemGift(gift.id)}
+              disabled={redeemingGiftId === gift.id}
+            >
+              {redeemingGiftId === gift.id ? <Loader2 className="spin" size={17} /> : <GiftIcon />}
+              <span>{redeemingGiftId === gift.id ? "Redeeming..." : "Redeem"}</span>
+            </button>
+          </div>
+        ))}
       </section>
     </main>
   );
+}
+
+function GiftIcon() {
+  return <Sparkles size={17} />;
 }
 
 export default function CustomerApp() {
@@ -1433,6 +1476,8 @@ export default function CustomerApp() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginMessage, setLoginMessage] = useState("");
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [redeemingGiftId, setRedeemingGiftId] = useState("");
   const [notificationPermission, setNotificationPermission] = useState(() =>
     canNotify() ? Notification.permission : "unsupported"
   );
@@ -1829,7 +1874,27 @@ export default function CustomerApp() {
   if (view === "profile" && currentUser) {
     return (
       <>
-        <ProfileView user={currentUser} onBack={() => setView("menu")} />
+        <ProfileView
+          user={currentUser}
+          onBack={() => setView("menu")}
+          message={profileMessage}
+          redeemingGiftId={redeemingGiftId}
+          onRedeemGift={async (giftId) => {
+            if (!customerToken) return;
+            setRedeemingGiftId(giftId);
+            setProfileMessage("");
+            try {
+              const data = await api.redeemCustomerGift(customerToken, giftId, { deviceId });
+              setCurrentUser(data.user);
+              setOrder(data.order);
+              setView("order");
+            } catch (error) {
+              setProfileMessage(error.message);
+            } finally {
+              setRedeemingGiftId("");
+            }
+          }}
+        />
         {renderCustomerOverlays()}
       </>
     );

@@ -28,6 +28,11 @@ export const api = {
   getAdminUsers: (token) => request("/admin/users", { token }),
   createAdminUser: (token, body) => request("/admin/users", { method: "POST", token, body }),
   updateAdminUser: (token, id, body) => request(`/admin/users/${id}`, { method: "PATCH", token, body }),
+  assignAdminUserGift: (token, id, body) => request(`/admin/users/${id}/gifts`, { method: "POST", token, body }),
+  getAdminGiftItems: (token) => request("/admin/gift-items", { token }),
+  createAdminGiftItem: (token, body) => request("/admin/gift-items", { method: "POST", token, body }),
+  updateAdminGiftItem: (token, id, body) => request(`/admin/gift-items/${id}`, { method: "PATCH", token, body }),
+  deleteAdminGiftItem: (token, id) => request(`/admin/gift-items/${id}`, { method: "DELETE", token }),
   createOrder: (token, customerName) =>
     request("/admin/orders", { method: "POST", token, body: { customerName } }),
   updateStatus: (token, id, status) =>
@@ -52,6 +57,8 @@ export const api = {
   getCustomerOrder: (deviceId, token) =>
     request(`/customer/order?deviceId=${encodeURIComponent(deviceId)}`, { token }),
   getCustomerHistory: (token) => request("/customer/history", { token }),
+  redeemCustomerGift: (token, giftId, body) =>
+    request(`/customer/gifts/${giftId}/redeem`, { method: "POST", token, body }),
   getPushConfig: () => request("/customer/push-config"),
   savePushSubscription: (deviceId, subscription) =>
     request("/customer/push-subscriptions", {

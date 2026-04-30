@@ -14,7 +14,7 @@ import BrandMark from "../components/BrandMark.jsx";
 import { api } from "../lib/api.js";
 
 const STATUSES = ["pending", "confirmed", "preparing", "ready", "delivered"];
-const TABS = ["orders", "reports", "users", "menu", "extras", "promotions"];
+const TABS = ["orders", "reports", "users", "gifts", "menu", "extras", "promotions"];
 const ORDER_PAGE_SIZE = 10;
 
 const statusLabels = {
@@ -64,6 +64,14 @@ const emptyUserForm = {
   password: "",
   credits: 0,
   active: true
+};
+
+const emptyGiftItemForm = {
+  name: "",
+  category: "",
+  description: "",
+  active: true,
+  sortOrder: 0
 };
 
 function orderItemDetails(item) {
@@ -253,7 +261,7 @@ function OrdersSection({ orders, onStatusChange, onPing, onDelete }) {
                     </span>
                     <span>
                       <strong>{order.customerName}</strong>
-                      <small>{order.items?.length || 0} lines</small>
+                      <small>{order.giftOrder ? "Gift order" : `${order.items?.length || 0} lines`}</small>
                     </span>
                     <span className={`admin-status-badge admin-status-${order.status}`}>{statusLabels[order.status]}</span>
                     <strong>{money(order.total)}</strong>
@@ -562,8 +570,91 @@ function ExtrasSection({
   );
 }
 
+function GiftItemsSection({
+  giftItems,
+  form,
+  editingId,
+  modalOpen,
+  setForm,
+  onSubmit,
+  onEdit,
+  onCreate,
+  onCancel,
+  onDelete,
+  onToggle
+}) {
+  return (
+    <section className="admin-list-section" aria-label="Gift items editor">
+      <div className="admin-section-toolbar">
+        <div>
+          <p className="eyebrow">Gifts</p>
+          <h2>Gift catalog</h2>
+        </div>
+        <button className="admin-primary" type="button" onClick={onCreate}>
+          <PlusCircle size={17} />
+          <span>Create gift item</span>
+        </button>
+      </div>
+
+      <div className="admin-menu-list">
+        {giftItems.map((item) => (
+          <article className={item.active ? "admin-menu-card" : "admin-menu-card admin-muted-card"} key={item.id}>
+            <div>
+              <span>{item.category}</span>
+              <h3>{item.name}</h3>
+              <p>{item.description || "Gift only item"}</p>
+            </div>
+            <strong>{item.active ? "Gift" : "Inactive"}</strong>
+            <div className="admin-card-actions">
+              <button className="admin-secondary" type="button" onClick={() => onToggle(item)}>
+                {item.active ? "Disable" : "Activate"}
+              </button>
+              <button className="admin-icon-button" type="button" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`}>
+                <Edit3 size={15} />
+              </button>
+              <button className="admin-icon-button admin-danger-button" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${item.name}`}>
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {modalOpen ? (
+        <AdminModal title={editingId ? "Edit gift item" : "Create gift item"} eyebrow="Gifts" onClose={onCancel}>
+          <form className="admin-editor-form" onSubmit={onSubmit}>
+            <label>
+              <span>Name</span>
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </label>
+            <label>
+              <span>Category</span>
+              <input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} />
+            </label>
+            <label>
+              <span>Description</span>
+              <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+            </label>
+            <div className="admin-checks">
+              <label>
+                <input checked={form.active} type="checkbox" onChange={(event) => setForm({ ...form, active: event.target.checked })} />
+                <span>Active</span>
+              </label>
+            </div>
+            <button className="admin-primary" type="submit">
+              {editingId ? <Save size={17} /> : <PlusCircle size={17} />}
+              <span>{editingId ? "Save gift item" : "Create gift item"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
+    </section>
+  );
+}
+
 function UsersSection({
   users,
+  giftItems,
   form,
   editingId,
   modalOpen,
@@ -573,13 +664,17 @@ function UsersSection({
   onCreate,
   onCancel,
   onToggle,
-  onAddCredits
+  onAddCredits,
+  onAssignGift
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [creditTarget, setCreditTarget] = useState(null);
   const [creditAmount, setCreditAmount] = useState("");
   const [creditBusy, setCreditBusy] = useState(false);
+  const [giftTarget, setGiftTarget] = useState(null);
+  const [giftMenuItemId, setGiftMenuItemId] = useState("");
+  const [giftBusy, setGiftBusy] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -611,6 +706,20 @@ function UsersSection({
 
     setCreditTarget(null);
     setCreditAmount("");
+  }
+
+  async function handleGiftSubmit(event) {
+    event.preventDefault();
+    if (!giftTarget) return;
+
+    setGiftBusy(true);
+    const success = await onAssignGift(giftTarget, giftMenuItemId);
+    setGiftBusy(false);
+
+    if (!success) return;
+
+    setGiftTarget(null);
+    setGiftMenuItemId("");
   }
 
   return (
@@ -663,10 +772,25 @@ function UsersSection({
             <div>
               <span>@{user.username}</span>
               <h3>{user.displayName}</h3>
-              <p>{user.active ? "Active account" : "Inactive account"}</p>
+              <p>
+                {user.active ? "Active account" : "Inactive account"}
+                {user.gifts?.filter((gift) => !gift.redeemed).length
+                  ? ` · ${user.gifts.filter((gift) => !gift.redeemed).length} gifts pending`
+                  : ""}
+              </p>
             </div>
             <strong>{money(user.credits)}</strong>
             <div className="admin-card-actions">
+              <button
+                className="admin-secondary"
+                type="button"
+                onClick={() => {
+                  setGiftTarget(user);
+                  setGiftMenuItemId(giftItems.find((item) => item.active)?.slug || giftItems[0]?.slug || "");
+                }}
+              >
+                Gift item
+              </button>
               <button
                 className="admin-primary admin-primary-compact"
                 type="button"
@@ -709,6 +833,28 @@ function UsersSection({
             <button className="admin-primary" type="submit" disabled={creditBusy}>
               <PlusCircle size={17} />
               <span>{creditBusy ? "Adding..." : "Add credits"}</span>
+            </button>
+          </form>
+        </AdminModal>
+      ) : null}
+
+      {giftTarget ? (
+        <AdminModal title="Assign gift" eyebrow={`@${giftTarget.username}`} onClose={() => setGiftTarget(null)}>
+          <form className="admin-editor-form" onSubmit={handleGiftSubmit}>
+            <label>
+              <span>Menu item</span>
+              <select value={giftMenuItemId} onChange={(event) => setGiftMenuItemId(event.target.value)}>
+                <option value="">Select a gift item</option>
+                {giftItems.filter((item) => item.active).map((item) => (
+                  <option value={item.slug} key={item.id}>
+                    {item.category} · {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="admin-primary" type="submit" disabled={giftBusy || !giftMenuItemId}>
+              <PlusCircle size={17} />
+              <span>{giftBusy ? "Assigning..." : "Assign gift"}</span>
             </button>
           </form>
         </AdminModal>
@@ -1033,6 +1179,7 @@ export default function AdminApp() {
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [giftItems, setGiftItems] = useState([]);
   const [extras, setExtras] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [reportDate, setReportDate] = useState(() => todayInThailand());
@@ -1047,6 +1194,9 @@ export default function AdminApp() {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState("");
   const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [giftItemForm, setGiftItemForm] = useState(emptyGiftItemForm);
+  const [editingGiftItemId, setEditingGiftItemId] = useState("");
+  const [giftItemModalOpen, setGiftItemModalOpen] = useState(false);
   const [extraForm, setExtraForm] = useState(emptyExtraForm);
   const [editingExtraId, setEditingExtraId] = useState("");
   const [extraModalOpen, setExtraModalOpen] = useState(false);
@@ -1064,6 +1214,12 @@ export default function AdminApp() {
     if (!token) return;
     const data = await api.getAdminMenuItems(token);
     setMenuItems(data.items);
+  }, [token]);
+
+  const loadGiftItems = useCallback(async () => {
+    if (!token) return;
+    const data = await api.getAdminGiftItems(token);
+    setGiftItems(data.items);
   }, [token]);
 
   const loadUsers = useCallback(async () => {
@@ -1100,7 +1256,7 @@ export default function AdminApp() {
   const loadAll = useCallback(async () => {
     if (!token) return;
     try {
-      await Promise.all([loadOrders(), loadUsers(), loadMenu(), loadExtras(), loadPromotions()]);
+      await Promise.all([loadOrders(), loadUsers(), loadGiftItems(), loadMenu(), loadExtras(), loadPromotions()]);
     } catch (error) {
       setMessage(error.message);
       if (error.message.includes("session") || error.message.includes("Authentication")) {
@@ -1108,7 +1264,7 @@ export default function AdminApp() {
         setToken("");
       }
     }
-  }, [loadExtras, loadMenu, loadOrders, loadPromotions, loadUsers, token]);
+  }, [loadExtras, loadGiftItems, loadMenu, loadOrders, loadPromotions, loadUsers, token]);
 
   useEffect(() => {
     loadAll();
@@ -1178,6 +1334,7 @@ export default function AdminApp() {
     setToken("");
     setOrders([]);
     setUsers([]);
+    setGiftItems([]);
     setMenuItems([]);
     setExtras([]);
     setPromotions([]);
@@ -1268,10 +1425,83 @@ export default function AdminApp() {
     }
   }
 
+  async function assignUserGift(user, menuItemId) {
+    if (!menuItemId) {
+      setMessage("Choose a gift item");
+      return false;
+    }
+
+    try {
+      const data = await api.assignAdminUserGift(token, user.id, { giftItemId: menuItemId });
+      setMessage(data.message);
+      await loadUsers();
+      return true;
+    } catch (error) {
+      setMessage(error.message);
+      return false;
+    }
+  }
+
   function createItem() {
     setEditingItemId("");
     setItemForm(emptyItemForm);
     setItemModalOpen(true);
+  }
+
+  function editGiftItem(item) {
+    setEditingGiftItemId(item.id);
+    setGiftItemModalOpen(true);
+    setGiftItemForm({
+      name: item.name,
+      category: item.category,
+      description: item.description || "",
+      active: item.active,
+      sortOrder: item.sortOrder || 0
+    });
+  }
+
+  function createGiftItem() {
+    setEditingGiftItemId("");
+    setGiftItemForm(emptyGiftItemForm);
+    setGiftItemModalOpen(true);
+  }
+
+  async function submitGiftItem(event) {
+    event.preventDefault();
+    setMessage("");
+    try {
+      const data = editingGiftItemId
+        ? await api.updateAdminGiftItem(token, editingGiftItemId, giftItemForm)
+        : await api.createAdminGiftItem(token, giftItemForm);
+      setMessage(data.message);
+      setGiftItemForm(emptyGiftItemForm);
+      setEditingGiftItemId("");
+      setGiftItemModalOpen(false);
+      await loadGiftItems();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function toggleGiftItem(item) {
+    try {
+      const data = await api.updateAdminGiftItem(token, item.id, { ...item, active: !item.active });
+      setMessage(data.message);
+      await loadGiftItems();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function deleteGiftItem(item) {
+    if (!window.confirm(`Delete ${item.name}?`)) return;
+    try {
+      const data = await api.deleteAdminGiftItem(token, item.id);
+      setMessage(data.message);
+      await loadGiftItems();
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   async function submitItem(event) {
@@ -1503,6 +1733,7 @@ export default function AdminApp() {
       {activeTab === "users" ? (
         <UsersSection
           users={users}
+          giftItems={giftItems}
           form={userForm}
           editingId={editingUserId}
           modalOpen={userModalOpen}
@@ -1517,6 +1748,27 @@ export default function AdminApp() {
           }}
           onToggle={toggleUser}
           onAddCredits={addUserCredits}
+          onAssignGift={assignUserGift}
+        />
+      ) : null}
+
+      {activeTab === "gifts" ? (
+        <GiftItemsSection
+          giftItems={giftItems}
+          form={giftItemForm}
+          editingId={editingGiftItemId}
+          modalOpen={giftItemModalOpen}
+          setForm={setGiftItemForm}
+          onSubmit={submitGiftItem}
+          onEdit={editGiftItem}
+          onCreate={createGiftItem}
+          onCancel={() => {
+            setEditingGiftItemId("");
+            setGiftItemForm(emptyGiftItemForm);
+            setGiftItemModalOpen(false);
+          }}
+          onDelete={deleteGiftItem}
+          onToggle={toggleGiftItem}
         />
       ) : null}
 
