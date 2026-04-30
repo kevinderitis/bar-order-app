@@ -4,7 +4,6 @@ import {
   Beer,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
   Clock3,
   CookingPot,
   CupSoda,
@@ -1208,65 +1207,64 @@ function ConfirmView({ cart, notes, onNotesChange, onBack, onAddItem, onRemoveIt
   const total = subtotal - discountTotal;
 
   return (
-    <main className="confirm-page">
-      <header className="confirm-header">
-        <button className="admin-secondary" type="button" onClick={onBack}>
-          <ChevronLeft size={17} />
-          <span>Menu</span>
-        </button>
-        <div>
-          <p className="eyebrow">Confirm</p>
-          <h1>Your order</h1>
-        </div>
-      </header>
-      <section className="confirm-panel">
-        {cart.length === 0 ? <div className="menu-empty">Your order is empty</div> : null}
-        {cart.map((item) => (
-          <div className="confirm-row" key={item.cartKey}>
-            <div>
-              <strong>{item.name}</strong>
-              <span>{itemDetailText(item) ? `${itemDetailText(item)} · ` : ""}Qty {item.quantity}</span>
+    <main className="account-page">
+      <AccountHeader title="Your order" />
+      <section className="account-scroll-area">
+        <div className="confirm-panel account-panel">
+          {cart.length === 0 ? <div className="menu-empty">Your order is empty</div> : null}
+          {cart.map((item) => (
+            <div className="confirm-row" key={item.cartKey}>
+              <div>
+                <strong>{item.name}</strong>
+                <span>{itemDetailText(item) ? `${itemDetailText(item)} · ` : ""}Qty {item.quantity}</span>
+              </div>
+              <span>{money(cartLineTotal(item))}</span>
+              <div className="confirm-item-actions">
+                <button type="button" onClick={() => onRemoveItem(item.cartKey)} aria-label={`Remove one ${item.name}`}>
+                  <Minus size={15} />
+                </button>
+                <strong>{item.quantity}</strong>
+                <button type="button" onClick={() => onAddItem(item.cartKey)} aria-label={`Add one ${item.name}`}>
+                  <Plus size={15} />
+                </button>
+                <button
+                  className="confirm-delete-button"
+                  type="button"
+                  onClick={() => onDeleteItem(item.cartKey)}
+                  aria-label={`Delete ${item.name}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
-            <span>{money(cartLineTotal(item))}</span>
-            <div className="confirm-item-actions">
-              <button type="button" onClick={() => onRemoveItem(item.cartKey)} aria-label={`Remove one ${item.name}`}>
-                <Minus size={15} />
-              </button>
-              <strong>{item.quantity}</strong>
-              <button type="button" onClick={() => onAddItem(item.cartKey)} aria-label={`Add one ${item.name}`}>
-                <Plus size={15} />
-              </button>
-              <button
-                className="confirm-delete-button"
-                type="button"
-                onClick={() => onDeleteItem(item.cartKey)}
-                aria-label={`Delete ${item.name}`}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+          ))}
+          <label className="order-notes">
+            <span>Special instructions</span>
+            <textarea
+              value={notes}
+              onChange={(event) => onNotesChange(event.target.value)}
+              placeholder="Anything we should know?"
+              maxLength={280}
+              rows={3}
+            />
+          </label>
+          <div className="totals-box">
+            <span>Subtotal <strong>{money(subtotal)}</strong></span>
+            <span>Discounts <strong>-{money(discountTotal)}</strong></span>
+            <span>Total <strong>{money(total)}</strong></span>
           </div>
-        ))}
-        <label className="order-notes">
-          <span>Special instructions</span>
-          <textarea
-            value={notes}
-            onChange={(event) => onNotesChange(event.target.value)}
-            placeholder="Anything we should know?"
-            maxLength={280}
-            rows={3}
-          />
-        </label>
-        <div className="totals-box">
-          <span>Subtotal <strong>{money(subtotal)}</strong></span>
-          <span>Discounts <strong>-{money(discountTotal)}</strong></span>
-          <span>Total <strong>{money(total)}</strong></span>
         </div>
       </section>
-      <button className="finish-order-button" type="button" onClick={onFinish} disabled={busy || cart.length === 0}>
-        {busy ? <Loader2 className="spin" size={20} /> : <CheckCircle2 size={20} />}
-        <span>Confirm order</span>
-      </button>
+      <div className="confirm-fixed-footer">
+        <button className="finish-order-button confirm-fixed-button" type="button" onClick={onFinish} disabled={busy || cart.length === 0}>
+          {busy ? <Loader2 className="spin" size={20} /> : <CheckCircle2 size={20} />}
+          <span>Confirm order</span>
+        </button>
+        <button className="scan-again-button confirm-secondary-button" type="button" onClick={onBack}>
+          <Utensils size={18} />
+          <span>Go to menu</span>
+        </button>
+      </div>
     </main>
   );
 }
@@ -1363,20 +1361,34 @@ function OrderView({ order, pushEnabled, onMenu, onEnableNotifications, showNoti
   );
 }
 
+function AccountHeader({ title }) {
+  return (
+    <header className="account-fixed-header">
+      <div>
+        <p className="eyebrow">Account</p>
+        <h1>{title}</h1>
+      </div>
+    </header>
+  );
+}
+
+function AccountFooter({ onMenu }) {
+  return (
+    <div className="account-fixed-footer">
+      <button className="scan-again-button" type="button" onClick={onMenu}>
+        <Utensils size={18} />
+        <span>Go to menu</span>
+      </button>
+    </div>
+  );
+}
+
 function HistoryView({ orders, onBack }) {
   return (
-    <main className="confirm-page">
-      <header className="confirm-header">
-        <button className="admin-secondary" type="button" onClick={onBack}>
-          <ChevronLeft size={17} />
-          <span>Menu</span>
-        </button>
-        <div>
-          <p className="eyebrow">Account</p>
-          <h1>Order history</h1>
-        </div>
-      </header>
-      <section className="confirm-panel">
+    <main className="account-page">
+      <AccountHeader title="Order history" />
+      <section className="account-scroll-area">
+        <div className="confirm-panel account-panel">
         {orders.length === 0 ? <div className="menu-empty">No previous orders yet</div> : null}
         {orders.map((order) => (
           <div className="confirm-row" key={order.id}>
@@ -1388,7 +1400,9 @@ function HistoryView({ orders, onBack }) {
             <span>{order.giftOrder ? "Gift" : money(order.total)}</span>
           </div>
         ))}
+        </div>
       </section>
+      <AccountFooter onMenu={onBack} />
     </main>
   );
 }
@@ -1397,50 +1411,44 @@ function ProfileView({ user, onBack, onRedeemGift, redeemingGiftId, message }) {
   const pendingGifts = (user?.gifts || []).filter((gift) => !gift.redeemed);
 
   return (
-    <main className="confirm-page">
-      <header className="confirm-header">
-        <button className="admin-secondary" type="button" onClick={onBack}>
-          <ChevronLeft size={17} />
-          <span>Menu</span>
-        </button>
-        <div>
-          <p className="eyebrow">Account</p>
-          <h1>Profile</h1>
-        </div>
-      </header>
-      <section className="confirm-panel">
-        <div className="confirm-row">
-          <div>
-            <strong>{user?.displayName}</strong>
-            <span>@{user?.username}</span>
-          </div>
-          <strong>{money(user?.credits)}</strong>
-        </div>
-        <div className="confirm-section-head">
-          <strong>Welcome gifts</strong>
-          <span>{pendingGifts.length} available</span>
-        </div>
-        {message ? <div className="promo-message">{message}</div> : null}
-        {pendingGifts.length === 0 ? <div className="menu-empty">No gifts available right now</div> : null}
-        {pendingGifts.map((gift) => (
-          <div className="confirm-row gift-row" key={gift.id}>
+    <main className="account-page">
+      <AccountHeader title="Profile" />
+      <section className="account-scroll-area">
+        <div className="confirm-panel account-panel">
+          <div className="confirm-row">
             <div>
-              <strong>{gift.name}</strong>
-              <span>{gift.category}</span>
-              <span>Gift item</span>
+              <strong>{user?.displayName}</strong>
+              <span>@{user?.username}</span>
             </div>
-            <button
-              className="admin-primary"
-              type="button"
-              onClick={() => onRedeemGift(gift.id)}
-              disabled={redeemingGiftId === gift.id}
-            >
-              {redeemingGiftId === gift.id ? <Loader2 className="spin" size={17} /> : <GiftIcon />}
-              <span>{redeemingGiftId === gift.id ? "Redeeming..." : "Redeem"}</span>
-            </button>
+            <strong>{money(user?.credits)}</strong>
           </div>
-        ))}
+          <div className="confirm-section-head">
+            <strong>Welcome gifts</strong>
+            <span>{pendingGifts.length} available</span>
+          </div>
+          {message ? <div className="promo-message">{message}</div> : null}
+          {pendingGifts.length === 0 ? <div className="menu-empty">No gifts available right now</div> : null}
+          {pendingGifts.map((gift) => (
+            <div className="confirm-row gift-row" key={gift.id}>
+              <div>
+                <strong>{gift.name}</strong>
+                <span>{gift.category}</span>
+                <span>Gift item</span>
+              </div>
+              <button
+                className="admin-primary"
+                type="button"
+                onClick={() => onRedeemGift(gift.id)}
+                disabled={redeemingGiftId === gift.id}
+              >
+                {redeemingGiftId === gift.id ? <Loader2 className="spin" size={17} /> : <GiftIcon />}
+                <span>{redeemingGiftId === gift.id ? "Redeeming..." : "Redeem"}</span>
+              </button>
+            </div>
+          ))}
+        </div>
       </section>
+      <AccountFooter onMenu={onBack} />
     </main>
   );
 }

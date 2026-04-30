@@ -962,6 +962,60 @@ button:disabled {
   align-content: start;
 }
 
+.account-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  height: 100dvh;
+  overflow: hidden;
+  padding: max(22px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background:
+    linear-gradient(150deg, rgba(255, 232, 212, 0.9), rgba(255, 247, 239, 0.92) 46%, rgba(229, 244, 231, 0.78)),
+    var(--cream);
+}
+
+.account-fixed-header {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 620px);
+  margin: 0 auto 14px;
+}
+
+.account-fixed-header h1 {
+  margin: 0;
+  color: var(--charcoal);
+  font-size: clamp(2rem, 9vw, 4rem);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.account-scroll-area {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 12px;
+}
+
+.account-panel {
+  margin-bottom: 0;
+}
+
+.account-fixed-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  width: min(100%, 620px);
+  margin: 14px auto 0;
+}
+
+.account-fixed-footer .scan-again-button {
+  width: 100%;
+  min-height: 48px;
+}
+
 .confirm-panel {
   display: grid;
   gap: 10px;
@@ -1117,6 +1171,31 @@ button:disabled {
   color: #fffaf3;
   background: linear-gradient(135deg, var(--charcoal), #3a312b);
   box-shadow: 0 20px 60px rgba(34, 32, 29, 0.28);
+}
+
+.confirm-fixed-footer {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  width: min(100%, 620px);
+  margin: 14px auto 0;
+}
+
+.confirm-fixed-button {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  color: #fffaf3;
+}
+
+.confirm-secondary-button {
+  width: 100%;
+  min-height: 48px;
 }
 
 .order-receipt {
