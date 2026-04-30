@@ -196,7 +196,7 @@ button:disabled {
 .menu-header,
 .confirm-header {
   position: relative;
-  z-index: 3;
+  z-index: 18;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -234,6 +234,7 @@ button:disabled {
 
 .menu-header-actions {
   position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -247,6 +248,7 @@ button:disabled {
 
 .account-menu-shell {
   position: relative;
+  isolation: isolate;
 }
 
 .account-menu-popover {
@@ -261,7 +263,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 20px 40px rgba(55, 33, 18, 0.12);
   backdrop-filter: blur(18px);
-  z-index: 20;
+  z-index: 40;
 }
 
 .account-menu-popover button {
